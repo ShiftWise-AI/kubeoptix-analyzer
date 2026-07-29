@@ -1,0 +1,25 @@
+# AI OCP App Assessment — Cursor Agent
+
+Este projeto avalia aplicações OpenShift a partir de artefatos já coletados (YAML + logs).
+
+## Formas de assessment
+
+1. **Cursor Agent (sem LLM externa)** — chat/Agent do Cursor. Não precisa de `.env` / `LLM_*`.
+2. **Análise local (sem LLM)** — `python -m agent --artifacts <dir> --mode local` gera **um único** `assessment-report.md` em pt-BR.
+3. **Agente Python LLM** (`--use-llm`) — requer API OpenAI-compatible.
+
+## Análise local / script
+
+```bash
+./scripts/run_assessment.sh --artifacts ./pasta-saida --report ./assessment-report.md
+# ou
+python -m agent --artifacts ./pasta-saida --mode local --report ./assessment-report.md
+```
+
+O Markdown único deve conter: sumário, inventário, achados, arquitetura reversa (mermaid), CPU/memória, observabilidade com gráficos, ConfigMaps sensíveis e plano de ação (infra × aplicação).
+
+## Prompt sugerido (Cursor Agent)
+
+> Faça o assessment OCP dos artefatos em `./pasta-saida` e grave um único arquivo `./pasta-saida/assessment-report.md` em português do Brasil, com arquitetura reversa, recursos, logs/gráficos, ConfigMaps e plano de ação (infra vs aplicação).
+
+Não inventar dados que não estejam nos arquivos. Não reintroduzir secrets sanitizados.
