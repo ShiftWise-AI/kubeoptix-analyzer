@@ -11,16 +11,17 @@ import os
 import sys
 import re
 import subprocess
-import json
+import hashlib
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple
 from datetime import datetime
 
 class MDToImagesConverter:
-    def __init__(self, input_dir: str, output_dir: str, verbose: bool = False):
+    def __init__(self, input_dir: str, output_dir: str, verbose: bool = False, inventory_events: str = None):
         self.input_dir = Path(input_dir).resolve()
         self.output_dir = Path(output_dir).resolve() if output_dir else None
         self.verbose = verbose
+        self.inventory_events = Path(inventory_events).resolve() if inventory_events else None
         self.input_is_file = self.input_dir.is_file()
         self.scan_root = self.input_dir.parent if self.input_is_file else self.input_dir
         
@@ -32,8 +33,16 @@ class MDToImagesConverter:
         # Criar diretório de saída para modo diretório.
         if not self.input_is_file:
             if self.output_dir is None:
-                self.output_dir = self.input_dir / 'output_images'
+                self.output_dir = self.input_dir / 'files'
             self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.input_is_file and self.output_dir is None:
+            self.output_dir = self.input_dir.parent / 'files'
+
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        self.image_hash_to_name, self.next_image_index = self._load_existing_images()
         
         # Validar dependências
         self._check_dependencies()
@@ -202,6 +211,52 @@ class MDToImagesConverter:
         except Exception as e:
             self.log('ERROR', f'Erro ao converter imagem: {str(e)}')
             return False
+
+    def _compute_md5(self, file_path: Path) -> str:
+        hasher = hashlib.md5()
+        with file_path.open('rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _load_existing_images(self):
+        pattern = re.compile(r'^imagem(\d+)\.png$')
+        hash_to_name = {}
+        max_index = 0
+
+        if self.output_dir is None:
+            return hash_to_name, 1
+
+        for existing_file in self.output_dir.glob('imagem*.png'):
+            match = pattern.match(existing_file.name)
+            if not match:
+                continue
+            max_index = max(max_index, int(match.group(1)))
+            file_hash = self._compute_md5(existing_file)
+            hash_to_name[file_hash] = existing_file.name
+
+        return hash_to_name, max_index + 1
+
+    def _append_inventory_event(self, file_name: str, origin: str, file_hash: str):
+        if self.inventory_events is None:
+            return
+        with self.inventory_events.open('a', encoding='utf-8') as f:
+            f.write(f'{file_name}\t{origin}\t{file_hash}\n')
+
+    def _register_image(self, tmp_file: Path, origin: str) -> str:
+        file_hash = self._compute_md5(tmp_file)
+        if file_hash in self.image_hash_to_name:
+            final_name = self.image_hash_to_name[file_hash]
+            tmp_file.unlink(missing_ok=True)
+        else:
+            final_name = f'imagem{self.next_image_index}.png'
+            final_path = self.output_dir / final_name
+            tmp_file.rename(final_path)
+            self.image_hash_to_name[file_hash] = final_name
+            self.next_image_index += 1
+
+        self._append_inventory_event(final_name, origin, file_hash)
+        return final_name
     
     def process_markdown_file(self, md_file: Path):
         """Processa um arquivo markdown"""
@@ -212,30 +267,22 @@ class MDToImagesConverter:
 
         self.log('INFO', f'Processando: {display_name}')
         
-        # Em modo arquivo, a saída fica no mesmo diretório do .md.
-        if self.input_is_file:
-            output_base_dir = md_file.parent
-        else:
-            output_base_dir = self.output_dir
-
-        # Criar diretório de saída para este arquivo
-        output_subdir = output_base_dir / f'{md_file.stem}_imagens'
+        output_subdir = self.output_dir
         output_subdir.mkdir(parents=True, exist_ok=True)
-
-        diagram_index = 1
         
         # Extrair e converter Mermaid
         mermaid_blocks = self._extract_mermaid_blocks(md_file)
-        for _, content in mermaid_blocks:
-            output_path = output_subdir / f'diagrama{diagram_index}.png'
-            self.log('DEBUG', f'Convertendo Mermaid diagrama #{diagram_index}')
+        for block_idx, content in mermaid_blocks:
+            tmp_path = output_subdir / f'.tmp_mermaid_{self.next_image_index}_{block_idx}.png'
+            self.log('DEBUG', 'Convertendo Mermaid para PNG')
             
-            if self._convert_mermaid_to_png(content, output_path):
-                self.log('INFO', f'  ✓ Mermaid -> {output_path}')
+            if self._convert_mermaid_to_png(content, tmp_path):
+                origin = f'{md_file}#mermaid{block_idx}'
+                final_name = self._register_image(tmp_path, origin)
+                self.log('INFO', f'  ✓ Mermaid -> {output_subdir / final_name}')
                 self.count_mermaid += 1
-                diagram_index += 1
             else:
-                self.log('ERROR', f'  ❌ Erro ao converter Mermaid #{diagram_index}')
+                self.log('ERROR', f'  ❌ Erro ao converter Mermaid #{block_idx}')
                 self.count_errors += 1
         
         # Extrair e converter imagens referenciadas
@@ -248,13 +295,14 @@ class MDToImagesConverter:
                 full_path = (md_file.parent / img_ref).resolve()
             
             if full_path.exists():
-                output_path = output_subdir / f'diagrama{diagram_index}.png'
+                tmp_path = output_subdir / f'.tmp_image_{self.next_image_index}.png'
                 self.log('DEBUG', f'Convertendo imagem: {full_path.name}')
                 
-                if self._convert_image_to_png(full_path, output_path):
-                    self.log('INFO', f'  ✓ Imagem -> {output_path}')
+                if self._convert_image_to_png(full_path, tmp_path):
+                    origin = f'{md_file}#image:{img_ref}'
+                    final_name = self._register_image(tmp_path, origin)
+                    self.log('INFO', f'  ✓ Imagem -> {output_subdir / final_name}')
                     self.count_images += 1
-                    diagram_index += 1
                 else:
                     self.log('ERROR', f'  ❌ Erro ao converter: {full_path.name}')
                     self.count_errors += 1
@@ -264,10 +312,7 @@ class MDToImagesConverter:
     def run(self):
         """Executa o processamento"""
         self.log('INFO', f'Diretório de entrada: {self.input_dir}')
-        if self.input_is_file:
-            self.log('INFO', f'Diretório de saída: {self.input_dir.parent} (mesmo diretório do arquivo de entrada)')
-        else:
-            self.log('INFO', f'Diretório de saída: {self.output_dir}')
+        self.log('INFO', f'Diretório de saída: {self.output_dir}')
         
         # Aceita um arquivo .md único ou um diretório com múltiplos .md.
         if self.input_is_file:
@@ -276,7 +321,11 @@ class MDToImagesConverter:
                 return False
             md_files = [self.input_dir]
         else:
-            md_files = list(self.input_dir.rglob('*.md'))
+            md_files = []
+            for md_file in self.input_dir.rglob('*.md'):
+                if self.output_dir is not None and self.output_dir in md_file.parents:
+                    continue
+                md_files.append(md_file)
         
         if not md_files:
             self.log('WARN', 'Nenhum arquivo .md encontrado')
@@ -317,12 +366,17 @@ def main():
         'output_dir',
         nargs='?',
         default=None,
-        help='Diretório de saída (modo diretório: padrão <input>/output_images; modo arquivo: mesmo diretório do .md)'
+        help='Diretório único de saída (padrão: <input>/files)'
     )
     parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Ativar modo verbose'
+    )
+    parser.add_argument(
+        '--inventory-events',
+        default=None,
+        help='Arquivo TSV para registrar eventos de inventário'
     )
     
     args = parser.parse_args()
@@ -330,7 +384,8 @@ def main():
     converter = MDToImagesConverter(
         args.input_dir,
         args.output_dir,
-        args.verbose
+        args.verbose,
+        args.inventory_events
     )
     
     success = converter.run()
