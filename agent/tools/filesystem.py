@@ -1,0 +1,151 @@
+"""Tools de filesystem para explorar artefatos."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from agent.tools.base import FunctionTool, object_schema
+
+
+def _safe_resolve(artifacts_dir: Path, relative_path: str) -> Path:
+    """Resolve path relativo e garante que permanece dentro de artifacts_dir."""
+    root = artifacts_dir.resolve()
+    target = (root / relative_path).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Path fora do diretório de artefatos: {relative_path}") from exc
+    return target
+
+
+def build_filesystem_tools(
+    artifacts_dir: Path,
+    max_file_chars: int,
+) -> list[FunctionTool]:
+    def list_artifacts(path: str = ".") -> str:
+        target = _safe_resolve(artifacts_dir, path)
+        if not target.exists():
+            return f"Path não encontrado: {path}"
+        if target.is_file():
+            return f"Arquivo: {path} ({target.stat().st_size} bytes)"
+
+        lines: list[str] = []
+        # Inventário estruturado: namespaces → apps
+        namespaces = sorted(
+            p for p in target.iterdir() if p.is_dir() and not p.name.startswith(".")
+        )
+        if not namespaces:
+            # fallback: listagem simples
+            for child in sorted(target.iterdir()):
+                kind = "dir" if child.is_dir() else "file"
+                lines.append(f"{kind}\t{child.relative_to(artifacts_dir)}")
+            return "\n".join(lines) or "(vazio)"
+
+        for ns in namespaces:
+            lines.append(f"namespace: {ns.name}")
+            apps_dir = ns / "apps"
+            if apps_dir.is_dir():
+                for app in sorted(apps_dir.iterdir()):
+                    if not app.is_dir():
+                        continue
+                    resource_counts: list[str] = []
+                    for sub in sorted(app.iterdir()):
+                        if sub.is_dir():
+                            n = sum(1 for _ in sub.rglob("*") if _.is_file())
+                            resource_counts.append(f"{sub.name}={n}")
+                    detail = ", ".join(resource_counts) if resource_counts else "vazio"
+                    lines.append(f"  app: {app.name} ({detail})")
+            resources_dir = ns / "resources"
+            if resources_dir.is_dir():
+                for sub in sorted(resources_dir.iterdir()):
+                    if sub.is_dir():
+                        n = sum(1 for _ in sub.rglob("*") if _.is_file())
+                        lines.append(f"  resources/{sub.name}: {n} arquivos")
+        return "\n".join(lines)
+
+    def read_file(path: str, max_chars: int | None = None) -> str:
+        limit = max_chars if max_chars is not None else max_file_chars
+        target = _safe_resolve(artifacts_dir, path)
+        if not target.is_file():
+            return f"Arquivo não encontrado: {path}"
+        text = target.read_text(encoding="utf-8", errors="replace")
+        if len(text) > limit:
+            return (
+                text[:limit]
+                + f"\n\n...[truncado: {len(text)} chars totais, mostrando {limit}]"
+            )
+        return text
+
+    def find_files(pattern: str = "**/*", path: str = ".") -> str:
+        base = _safe_resolve(artifacts_dir, path)
+        if not base.exists():
+            return f"Path não encontrado: {path}"
+        matches = sorted(
+            p.relative_to(artifacts_dir).as_posix()
+            for p in base.glob(pattern)
+            if p.is_file()
+        )
+        if not matches:
+            return f"Nenhum arquivo para padrão: {pattern}"
+        # Limita listagem para não estourar contexto
+        max_items = 200
+        shown = matches[:max_items]
+        extra = len(matches) - len(shown)
+        out = "\n".join(shown)
+        if extra > 0:
+            out += f"\n... e mais {extra} arquivos"
+        return out
+
+    return [
+        FunctionTool(
+            name="list_artifacts",
+            description=(
+                "Lista inventário de namespaces/aplicações (ou conteúdo de um "
+                "subdiretório) sob a pasta de artefatos."
+            ),
+            parameters=object_schema(
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo ao diretório de artefatos (default: .)",
+                    }
+                }
+            ),
+            handler=list_artifacts,
+        ),
+        FunctionTool(
+            name="read_file",
+            description="Lê o conteúdo de um arquivo (YAML ou log), com limite de tamanho.",
+            parameters=object_schema(
+                {
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo ao diretório de artefatos",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Limite opcional de caracteres a retornar",
+                    },
+                },
+                required=["path"],
+            ),
+            handler=read_file,
+        ),
+        FunctionTool(
+            name="find_files",
+            description="Busca arquivos por glob pattern (ex: '**/pod-logs/*.log', '**/deployments/*.yaml').",
+            parameters=object_schema(
+                {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (default: **/*)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Subdiretório relativo para iniciar a busca",
+                    },
+                }
+            ),
+            handler=find_files,
+        ),
+    ]

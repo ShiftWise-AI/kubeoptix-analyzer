@@ -1,0 +1,21 @@
+---
+description: Assessment OCP via Cursor Agent — analisa artefatos e gera relatório sem LLM externa
+alwaysApply: true
+---
+
+# Assessment OpenShift (Cursor Agent)
+
+Quando o usuário pedir assessment, análise de apps OCP, ou relatório dos artefatos:
+
+1. Confirmar o diretório de artefatos (ex.: `./pasta-saida` ou `oc-health-artifacts-*`).
+2. Explorar a árvore: `<ns>/apps/<app>/{deployments,deploymentconfigs,statefulsets,routes,services,hpa,pod-logs,...}` e `<ns>/resources/`.
+3. Ler manifests relevantes; extrair replicas, image, probes, resources, routes/TLS, services, HPA.
+4. Escanear `pod-logs` por ERROR, Exception, OOM, CrashLoop, Back-off, timeout.
+5. Gerar **um único** `<artifacts>/assessment-report.md` em pt-BR com: sumário, inventário, achados, arquitetura reversa (Deployments/Services/Routes), CPU/memória por app, observabilidade com gráficos, ConfigMaps sensíveis e plano de ação (infraestrutura × aplicação).
+
+## Regras
+
+- Não inventar dados fora dos arquivos.
+- Não pedir `LLM_API_KEY` — o Cursor já é o modelo.
+- Não recriar secrets; artefatos devem estar sanitizados (`oc_remove_secret_manifests` + `python_valida_logs.py`).
+- Preferir evidências com paths de arquivo no relatório.

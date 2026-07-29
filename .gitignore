@@ -1,0 +1,8 @@
+.venv/
+.env
+.envapi
+__pycache__/
+*.pyc
+oc-health-artifacts-*/
+*.egg-info/
+.pytest_cache/
