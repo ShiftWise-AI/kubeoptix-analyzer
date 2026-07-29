@@ -20,22 +20,28 @@ Ferramenta para **assessment de aplicações OpenShift**: coleta artefatos do cl
 
 ---
 
+
+
 ## Visão geral
 
 O processo tem **duas fases bem separadas**:
 
-| Fase | Quem executa | O quê |
-|------|--------------|--------|
+
+| Fase                          | Quem executa        | O quê                                                                              |
+| ----------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
 | **1. Extração e sanitização** | Scripts bash/Python | Coleta YAML/logs do OpenShift, remove Secrets e anonimiza dados sensíveis nos logs |
-| **2. Assessment** | Agente local ou LLM | Lê apenas artefatos já sanitizados e gera o relatório Markdown |
+| **2. Assessment**             | Agente local ou LLM | Lê apenas artefatos já sanitizados e gera o relatório Markdown                     |
+
 
 **Importante:**
 
-- Os dados **precisam ser extraídos pelos scripts de coleta** (`oc_collect_*`).
+- Os dados **precisam ser extraídos pelos scripts de coleta** (`oc_collect_`*).
 - A **anonimização e a remoção de secrets são feitas só pelos scripts**, **sem interação do agente de IA**.
 - O agente (local ou LLM) **não** deve coletar do cluster nem manipular secrets; ele analisa a pasta de artefatos já preparada.
 
 ---
+
+
 
 ## Pré-requisitos
 
@@ -48,6 +54,8 @@ Para modo LLM com Cursor:
 - Assinatura Cursor e API key em [cursor.com/dashboard/api](https://cursor.com/dashboard/api)
 
 ---
+
+
 
 ## Instalação
 
@@ -64,6 +72,8 @@ cp .env.example .env
 ```
 
 ---
+
+
 
 ## Fluxo de trabalho
 
@@ -86,16 +96,24 @@ Você pode rodar o pipeline completo de uma vez (`run_assessment.sh`) ou cada et
 
 ---
 
+
+
 ## Pipeline — ordem de execução
+
+
 
 ### Ordem obrigatória (quando feita passo a passo)
 
-| # | Etapa | Comando | Observação |
-|---|--------|---------|------------|
-| 1 | Coleta | `oc_collect_all_namespaces.sh` ou `oc_collect_namespace.sh` | Extrai dados do cluster |
-| 2 | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>` | **Script**, sem agente |
-| 3 | Anonimizar logs | `python python_valida_logs.py <pasta>` | **Script**, sem agente |
-| 4 | Assessment | `python -m agent --artifacts <pasta> ...` | Local ou LLM |
+
+| #   | Etapa           | Comando                                                     | Observação              |
+| --- | --------------- | ----------------------------------------------------------- | ----------------------- |
+| 1   | Coleta          | `oc_collect_all_namespaces.sh` ou `oc_collect_namespace.sh` | Extrai dados do cluster |
+| 2   | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>`                  | **Script**, sem agente  |
+| 3   | Anonimizar logs | `python python_valida_logs.py <pasta>`                      | **Script**, sem agente  |
+| 4   | Assessment      | `python -m agent --artifacts <pasta> ...`                   | Local ou LLM            |
+
+
+
 
 ### Pipeline único (recomendado)
 
@@ -120,14 +138,20 @@ Com artefatos **já coletados e já sanitizados**:
 
 ---
 
+
+
 ## Scripts
+
+
 
 ### Coleta
 
-| Script | Função |
-|--------|--------|
-| [`scripts/oc_collect_namespace.sh`](scripts/oc_collect_namespace.sh) | Coleta artefatos de **um** namespace (deployments, services, routes, configmaps, logs, etc.) |
-| [`scripts/oc_collect_all_namespaces.sh`](scripts/oc_collect_all_namespaces.sh) | Orquestra a coleta para **vários** namespaces |
+
+| Script                                                                         | Função                                                                                       |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `[scripts/oc_collect_namespace.sh](scripts/oc_collect_namespace.sh)`           | Coleta artefatos de **um** namespace (deployments, services, routes, configmaps, logs, etc.) |
+| `[scripts/oc_collect_all_namespaces.sh](scripts/oc_collect_all_namespaces.sh)` | Orquestra a coleta para **vários** namespaces                                                |
+
 
 Exemplos:
 
@@ -146,10 +170,12 @@ Requisitos: `oc` no PATH e sessão autenticada.
 
 ### Sanitização (sem agente de IA)
 
-| Script | Função |
-|--------|--------|
-| [`scripts/oc_remove_secret_manifests.sh`](scripts/oc_remove_secret_manifests.sh) | Apaga manifests YAML com `kind: Secret` |
-| [`python_valida_logs.py`](python_valida_logs.py) | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
+
+| Script                                                                           | Função                                                                                 |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `[scripts/oc_remove_secret_manifests.sh](scripts/oc_remove_secret_manifests.sh)` | Apaga manifests YAML com `kind: Secret`                                                |
+| `[python_valida_logs.py](python_valida_logs.py)`                                 | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
+
 
 ```bash
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
@@ -159,39 +185,54 @@ Requisitos: `oc` no PATH e sessão autenticada.
 python python_valida_logs.py ./pasta-saida
 ```
 
+
+
 ### Orquestração e assessment
 
-| Script / comando | Função |
-|------------------|--------|
-| [`scripts/run_assessment.sh`](scripts/run_assessment.sh) | Pipeline completo: coleta (opcional) → sanitize → agente |
-| `python -m agent` | Gera o relatório a partir de uma pasta de artefatos |
+
+| Script / comando                                         | Função                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| `[scripts/run_assessment.sh](scripts/run_assessment.sh)` | Pipeline completo: coleta (opcional) → sanitize → agente |
+| `python -m agent`                                        | Gera o relatório a partir de uma pasta de artefatos      |
+
+
+
 
 ### Utilitários de conversão (opcional)
 
-| Script | Função |
-|--------|--------|
+
+| Script                              | Função                                                               |
+| ----------------------------------- | -------------------------------------------------------------------- |
 | `scripts/convert.sh` / `md_to_*.py` | Conversão do relatório Markdown para outros formatos (se necessário) |
+
 
 ---
 
+
+
 ## Anonimização e remoção de secrets
+
+
 
 ### Princípio
 
 > **Extração, remoção de Secrets e anonimização de logs são responsabilidade exclusiva dos scripts.**  
 > O agente de assessment (local ou LLM) **não** participa dessas etapas e **não** deve receber artefatos ainda com secrets ou PII em claro.
 
+
+
 ### O que cada script faz
 
-1. **`oc_remove_secret_manifests.sh`**
-   - Percorre a árvore de artefatos
-   - Identifica YAML com `kind: Secret`
-   - Remove esses arquivos do disco
+1. `oc_remove_secret_manifests.sh`
+  - Percorre a árvore de artefatos
+  - Identifica YAML com `kind: Secret`
+  - Remove esses arquivos do disco
+2. `python_valida_logs.py`
+  - Percorre logs (e demais arquivos na pasta informada)
+  - Detecta padrões sensíveis (documentos, contatos, tokens, certificados, credenciais, etc.)
+  - Substitui/mascara os valores encontrados
 
-2. **`python_valida_logs.py`**
-   - Percorre logs (e demais arquivos na pasta informada)
-   - Detecta padrões sensíveis (documentos, contatos, tokens, certificados, credenciais, etc.)
-   - Substitui/mascara os valores encontrados
+
 
 ### Por que isso importa
 
@@ -200,6 +241,8 @@ python python_valida_logs.py ./pasta-saida
 - Mantém auditoria clara: sanitização determinística por script, análise depois
 
 ---
+
+
 
 ## Executar sem LLM
 
@@ -216,6 +259,8 @@ python -m agent \
   --report ./assessment-report.md
 ```
 
+
+
 ### Opção B — pipeline completo sem LLM
 
 ```bash
@@ -226,6 +271,8 @@ source .venv/bin/activate
   -o ./pasta-saida \
   --report ./pasta-saida/assessment-report.md
 ```
+
+
 
 ### Opção C — artefatos já coletados; ainda sanitizar + assessment
 
@@ -238,6 +285,8 @@ source .venv/bin/activate
 (`--artifacts` pula a coleta; sanitize roda a menos que use `--skip-sanitize`.)
 
 ---
+
+
 
 ## Executar com LLM
 
@@ -265,6 +314,8 @@ python -m agent \
   --report ./assessment-report.md
 ```
 
+
+
 ### Pipeline completo com LLM
 
 ```bash
@@ -274,6 +325,8 @@ python -m agent \
   --use-llm \
   --report ./pasta-saida/assessment-report.md
 ```
+
+
 
 ### Alternativa OpenAI-compatible
 
@@ -291,21 +344,25 @@ LLM_MODEL=gpt-4o-mini
 
 ---
 
+
+
 ## Conteúdo do relatório
 
 O assessment gera **um único** arquivo Markdown em **pt-BR**, em geral `assessment-report.md`, com:
 
-1. Sumário executivo e inventário  
-2. Achados de configuração  
-3. Arquitetura reversa (Deployments, Services, Routes, ConfigMaps) + diagrama  
-4. CPU/memória por aplicação e sumário do namespace  
-5. Observabilidade (logs, métricas, monitoramento) e oportunidades de melhoria  
-6. Análise de ConfigMaps (indícios de dados sensíveis)  
+1. Sumário executivo e inventário
+2. Achados de configuração
+3. Arquitetura reversa (Deployments, Services, Routes, ConfigMaps) + diagrama
+4. CPU/memória por aplicação e sumário do namespace
+5. Observabilidade (logs, métricas, monitoramento) e oportunidades de melhoria
+6. Análise de ConfigMaps (indícios de dados sensíveis)
 7. Plano de ação separado:
-   - Infraestrutura do cluster / plataforma  
-   - Melhorias da aplicação  
+  - Infraestrutura do cluster / plataforma  
+  - Melhorias da aplicação
 
 ---
+
+
 
 ## Estrutura do repositório
 
@@ -331,14 +388,18 @@ ai-ocp-app-assessment/
 
 ---
 
+
+
 ## Resumo rápido
 
-| Objetivo | Comando |
-|----------|---------|
-| Coletar + sanitizar + relatório **sem** LLM | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out` |
-| Só relatório **sem** LLM | `python -m agent -a ./out --mode local -r ./assessment-report.md` |
-| Só relatório **com** LLM (Cursor) | `python -m agent -a ./out --mode llm -r ./assessment-report.md` |
-| Remover Secrets | `./scripts/oc_remove_secret_manifests.sh -d ./out` |
-| Anonimizar logs | `python python_valida_logs.py ./out` |
+
+| Objetivo                                    | Comando                                                           |
+| ------------------------------------------- | ----------------------------------------------------------------- |
+| Coletar + sanitizar + relatório **sem** LLM | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out`     |
+| Só relatório **sem** LLM                    | `python -m agent -a ./out --mode local -r ./assessment-report.md` |
+| Só relatório **com** LLM (Cursor)           | `python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
+| Remover Secrets                             | `./scripts/oc_remove_secret_manifests.sh -d ./out`                |
+| Anonimizar logs                             | `python python_valida_logs.py ./out`                              |
+
 
 **Lembrete:** extraia com os scripts de coleta; anonimize e remova secrets **antes** do agente; o agente só analisa a pasta já sanitizada.

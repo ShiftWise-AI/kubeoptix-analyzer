@@ -4,7 +4,7 @@ Este projeto avalia aplicações OpenShift a partir de artefatos já coletados (
 
 ## Formas de assessment
 
-1. **Cursor Agent (sem LLM externa)** — chat/Agent do Cursor. Não precisa de `.env` / `LLM_*`.
+1. **Cursor Agent (sem LLM externa)** — chat/Agent do Cursor. Não precisa de `.env` / `LLM_`*.
 2. **Análise local (sem LLM)** — `python -m agent --artifacts <dir> --mode local` gera **um único** `assessment-report.md` em pt-BR.
 3. **Agente Python LLM** (`--use-llm`) — requer API OpenAI-compatible.
 
