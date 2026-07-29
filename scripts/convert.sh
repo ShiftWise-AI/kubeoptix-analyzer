@@ -2,60 +2,68 @@
 set -euo pipefail
 
 usage() {
-    echo "Uso: $0 <diretório_de_entrada> <diretório_de_saida>"
+    echo "Uso: $0 <diretório_de_entrada>"
 }
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 1 ]; then
     usage
     exit 1
 fi
 
 INPUT_DIR="$1"
-OUTPUT_DIR="$2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FILES_DIR="$INPUT_DIR/files"
+EVENTS_FILE="$FILES_DIR/.inventory_events.tsv"
+INVENTORY_FILE="$FILES_DIR/inventario.md"
 
 if [ ! -d "$INPUT_DIR" ]; then
     echo "Erro: diretório de entrada não encontrado: $INPUT_DIR"
     exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$FILES_DIR"
+: > "$EVENTS_FILE"
 
-mapfile -t md_files < <(find "$INPUT_DIR" -type f -name '*.md' | sort)
+mapfile -t md_files < <(find "$INPUT_DIR" -type f -name '*.md' ! -path "$FILES_DIR/*" | sort)
 
 if [ ${#md_files[@]} -eq 0 ]; then
     echo "Nenhum arquivo .md encontrado em $INPUT_DIR"
     exit 0
 fi
 
-echo "Processando $(printf '%s
-' "${md_files[@]}" | wc -l) arquivo(s) Markdown..."
+echo "Processando ${#md_files[@]} arquivo(s) Markdown..."
 
 echo "Diretório de entrada: $INPUT_DIR"
-echo "Diretório de saída: $OUTPUT_DIR"
+echo "Diretório de saída único: $FILES_DIR"
 
 echo
 
 for md_file in "${md_files[@]}"; do
-    rel_path="${md_file#"$INPUT_DIR"/}"
-    rel_dir="$(dirname "$rel_path")"
-    target_dir="$OUTPUT_DIR/$rel_dir"
-    mkdir -p "$target_dir"
-
-    work_file="$target_dir/$(basename "$md_file")"
-    cp "$md_file" "$work_file"
-
-    echo "[1/3] Convertendo DOCX: $(basename "$md_file")"
-    python3 "$SCRIPT_DIR/md_to_docx.py" "$work_file"
-
     echo "[2/3] Convertendo Excel: $(basename "$md_file")"
-    python3 "$SCRIPT_DIR/md_to_excel.py" --md-file "$work_file"
+    python3 "$SCRIPT_DIR/md_to_excel.py" \
+        --md-file "$md_file" \
+        --files-dir "$FILES_DIR" \
+        --inventory-events "$EVENTS_FILE"
 
 done
 
 echo "[3/3] Convertendo imagens e diagramas Mermaid"
-python3 "$SCRIPT_DIR/md_to_images.py" "$INPUT_DIR" "$OUTPUT_DIR"
+python3 "$SCRIPT_DIR/md_to_images.py" \
+    "$INPUT_DIR" \
+    "$FILES_DIR" \
+    --inventory-events "$EVENTS_FILE"
+
+{
+    echo "| nome_arquivo_gerado | origem | hash_m5 |"
+    echo "|---|---|---|"
+    if [ -s "$EVENTS_FILE" ]; then
+        awk -F '\t' '!seen[$1]++ { rows[$1]=$0 } END { for (k in rows) print rows[k] }' "$EVENTS_FILE" \
+            | sort \
+            | awk -F '\t' '{ printf "| %s | %s | %s |\n", $1, $2, $3 }'
+    fi
+} > "$INVENTORY_FILE"
 
 echo
 
 echo "Conversão concluída."
+echo "Inventário gerado: $INVENTORY_FILE"
