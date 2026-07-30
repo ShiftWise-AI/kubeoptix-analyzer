@@ -354,11 +354,13 @@ O assessment gera **um único** arquivo Markdown em **pt-BR**, em geral `assessm
 2. Achados de configuração
 3. Arquitetura reversa (Deployments, Services, Routes, ConfigMaps) + diagrama
 4. CPU/memória por aplicação e sumário do namespace
-5. Observabilidade (logs, métricas, monitoramento) e oportunidades de melhoria
-6. Análise de ConfigMaps (indícios de dados sensíveis)
-7. Plano de ação separado:
-  - Infraestrutura do cluster / plataforma  
-  - Melhorias da aplicação
+5. Sugestões **conservadoras** de resources e **HPA**, com exemplos YAML
+6. Observabilidade (logs, métricas, monitoramento) e oportunidades de melhoria
+7. Análise de ConfigMaps (indícios de dados sensíveis)
+8. Plano de ação separado:
+   - Infraestrutura do cluster / plataforma
+   - Melhorias da aplicação
+9. Referências utilizadas (Kubernetes, OpenShift, HPA, QoS)
 
 ---
 

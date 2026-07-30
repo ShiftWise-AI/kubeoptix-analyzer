@@ -30,6 +30,8 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
 4. Recursos de CPU e memória
    - Lista por aplicação (requests = mínimo, limits = máximo)
    - Sumário do namespace
+   - Sugestão conservadora otimizada de CPU/memória por contêiner (Burstable, limit ≈ 2× request)
+   - Sugestões de HPA (min/max, target CPU/memória) e exemplos YAML aplicáveis
    - Gráficos pizza mermaid (`pie showData`) quando houver dados
 5. Observabilidade (métricas, logs, monitoramento)
    - Oportunidades de rastreabilidade e correção de erros
@@ -38,6 +40,7 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
 7. Plano de ação em seções separadas:
    - Ações de infraestrutura do cluster / plataforma
    - Melhorias da aplicação
+8. Referências utilizadas (documentação Kubernetes/OpenShift/HPA/QoS) no final do arquivo
    - Priorização e critérios de aceite
 
 Regras:
