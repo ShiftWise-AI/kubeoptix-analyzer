@@ -21,6 +21,7 @@ class NamespaceArtifacts:
     routes: list[Path] = field(default_factory=list)
     configmaps: list[Path] = field(default_factory=list)
     pods: list[Path] = field(default_factory=list)
+    hpas: list[Path] = field(default_factory=list)
     log_files: list[Path] = field(default_factory=list)
     service_monitors: list[Path] = field(default_factory=list)
     pod_monitors: list[Path] = field(default_factory=list)
@@ -56,6 +57,12 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         )
         ns.configmaps = _glob_resource_dirs(resources, "configmaps")
         ns.pods = _glob_resource_dirs(resources, "pods")
+        ns.hpas = _glob_resource_dirs(
+            resources,
+            "horizontalpodautoscalers.autoscaling",
+            "horizontalpodautoscalers",
+            "hpa",
+        )
         ns.service_monitors = _glob_resource_dirs(
             resources, "servicemonitors.monitoring.coreos.com"
         )
@@ -83,6 +90,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
                 ("services", "services"),
                 ("routes", "routes"),
                 ("configmaps", "configmaps"),
+                ("hpa", "hpas"),
                 ("pod-logs", "log_files"),
             ):
                 d = app_dir / sub
@@ -99,6 +107,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         "routes",
         "configmaps",
         "pods",
+        "hpas",
         "log_files",
         "service_monitors",
         "pod_monitors",

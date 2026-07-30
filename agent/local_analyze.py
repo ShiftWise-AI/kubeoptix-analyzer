@@ -11,6 +11,7 @@ from agent.analysis.configmaps_security import analyze_configmaps, render_config
 from agent.analysis.discovery import discover_namespaces, list_apps
 from agent.analysis.findings import analyze_findings
 from agent.analysis.observability import analyze_observability, render_observability_md
+from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
 
@@ -151,6 +152,10 @@ def run_local_assessment(
     parts.append("---")
     parts.append("")
     parts.extend(body_parts)
+    parts.append("---")
+    parts.append("")
+    parts.append(REFERENCES_MD.strip())
+    parts.append("")
 
     content = "\n".join(parts)
     # Normaliza múltiplas linhas em branco
