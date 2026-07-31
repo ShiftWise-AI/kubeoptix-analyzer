@@ -11,7 +11,17 @@ Quando o usuário pedir assessment, análise de apps OCP, ou relatório dos arte
 2. Explorar a árvore: `<ns>/apps/<app>/{deployments,deploymentconfigs,statefulsets,routes,services,hpa,pod-logs,...}` e `<ns>/resources/`.
 3. Ler manifests relevantes; extrair replicas, image, probes, resources, routes/TLS, services, HPA.
 4. Escanear `pod-logs` por ERROR, Exception, OOM, CrashLoop, Back-off, timeout.
-5. Gerar **um único** `<artifacts>/assessment-report.md` em pt-BR com: sumário, inventário, achados, arquitetura reversa (Deployments/Services/Routes), CPU/memória por app, observabilidade com gráficos, ConfigMaps sensíveis e plano de ação (infraestrutura × aplicação).
+5. Inventariar operadores OLM em `<ns>/resources/clusterserviceversions.operators.coreos.com/` (displayName, CSV name, version, phase, provider).
+6. Gerar **um único** `<artifacts>/assessment-report.md` em pt-BR com: sumário, inventário, achados, arquitetura reversa (Deployments/Services/Routes), CPU/memória por app, observabilidade com gráficos, ConfigMaps sensíveis e plano de ação (infraestrutura × aplicação).
+
+## Inventário (seção 2)
+
+Subseções em **tabela Markdown** (não prosa/lista inline):
+- 2.1 Workloads · 2.2 Services · 2.3 Exposição externa · 2.4 ConfigMaps · 2.5 Secrets referenciados
+- **2.6 Operadores presentes (ClusterServiceVersions)** — tabela com colunas:
+  `Operador (displayName) | CSV | Versão | Phase | Upgrade disponível | Provider | Evidência`
+  Uma linha por CSV; path do YAML na coluna Evidência.
+  **Upgrade disponível**: estado OLM (`AtLatestKnown`, `UpgradeAvailable`, `UpgradePending`, `UpgradeFailed`) via Subscription.status.state; senão inferir com PackageManifest.currentCSV; `—` se sem evidência.
 
 ## Regras
 

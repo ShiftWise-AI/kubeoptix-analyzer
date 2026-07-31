@@ -1,4 +1,4 @@
-"""Arquitetura reversa simples a partir de Deployments, Services, Routes e ConfigMaps."""
+"""Arquitetura reversa a partir de Deployments, Services, Routes e ConfigMaps."""
 
 from __future__ import annotations
 
@@ -194,7 +194,7 @@ def _render_mermaid_simple(topo: TopologyResult) -> str:
 
 def render_topology_md(ns_name: str, topo: TopologyResult) -> str:
     lines = [
-        f"# Arquitetura reversa da aplicação — `{ns_name}`",
+        f"# Arquitetura reversa — `{ns_name}`",
         "",
         "Visão simples reconstruída a partir de **Deployments**, **Services**, "
         "**Routes** e **ConfigMaps**.",

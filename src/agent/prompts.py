@@ -22,7 +22,7 @@ o relatório está completo.
 
 Estrutura sugerida do relatório (seções):
 1. Resumo executivo
-2. Inventário
+2. Inventário (subseções em tabela; 2.6 Operadores/CSVs obrigatoriamente em tabela Markdown)
 3. Achados (por severidade: alto / médio / baixo)
 4. Análise de logs
 5. Recomendações

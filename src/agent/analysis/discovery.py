@@ -26,6 +26,9 @@ class NamespaceArtifacts:
     service_monitors: list[Path] = field(default_factory=list)
     pod_monitors: list[Path] = field(default_factory=list)
     prometheus_rules: list[Path] = field(default_factory=list)
+    clusterserviceversions: list[Path] = field(default_factory=list)
+    subscriptions: list[Path] = field(default_factory=list)
+    packagemanifests: list[Path] = field(default_factory=list)
 
 
 def _glob_resource_dirs(resources: Path, *names: str) -> list[Path]:
@@ -72,6 +75,21 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         ns.prometheus_rules = _glob_resource_dirs(
             resources, "prometheusrules.monitoring.coreos.com"
         )
+        ns.clusterserviceversions = _glob_resource_dirs(
+            resources,
+            "clusterserviceversions.operators.coreos.com",
+            "clusterserviceversions",
+        )
+        ns.subscriptions = _glob_resource_dirs(
+            resources,
+            "subscriptions.operators.coreos.com",
+            "subscriptions",
+        )
+        ns.packagemanifests = _glob_resource_dirs(
+            resources,
+            "packagemanifests.packages.operators.coreos.com",
+            "packagemanifests",
+        )
 
     for logs_dir_name in ("pods-logs", "pod-logs"):
         logs_dir = root / logs_dir_name
@@ -112,6 +130,9 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         "service_monitors",
         "pod_monitors",
         "prometheus_rules",
+        "clusterserviceversions",
+        "subscriptions",
+        "packagemanifests",
     ):
         seen: set[Path] = set()
         unique: list[Path] = []

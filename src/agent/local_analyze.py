@@ -11,6 +11,7 @@ from agent.analysis.configmaps_security import analyze_configmaps, render_config
 from agent.analysis.discovery import discover_namespaces, list_apps
 from agent.analysis.findings import analyze_findings
 from agent.analysis.observability import analyze_observability, render_observability_md
+from agent.analysis.operators import analyze_operators, render_operators_md
 from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
@@ -96,6 +97,7 @@ def run_local_assessment(
         obs = analyze_observability(ns, apps)
         cms = analyze_configmaps(ns)
         findings = analyze_findings(ns)
+        operators = analyze_operators(ns)
 
         sev = {"alto": 0, "medio": 0, "baixo": 0}
         for f in findings.items:
@@ -137,8 +139,10 @@ def run_local_assessment(
                 f"- Services: **{len(ns.services)}**",
                 f"- Routes: **{len(ns.routes)}**",
                 f"- ConfigMaps: **{len(ns.configmaps)}**",
+                f"- ClusterServiceVersions (operadores): **{len(operators.items)}**",
                 f"- Arquivos de log: **{len(ns.log_files)}**",
                 "",
+                render_operators_md(ns.name, operators),
                 _render_findings_block(ns.name, findings),
                 _demote_headings(render_topology_md(ns.name, topo), levels=2),
                 _demote_headings(render_resources_md(ns.name, resources), levels=2),
