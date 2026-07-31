@@ -17,5 +17,5 @@ Quando o usuário pedir assessment, análise de apps OCP, ou relatório dos arte
 
 - Não inventar dados fora dos arquivos.
 - Não pedir `LLM_API_KEY` — o Cursor já é o modelo.
-- Não recriar secrets; artefatos devem estar sanitizados (`oc_remove_secret_manifests` + `anonymization.py`).
+- Não recriar secrets; artefatos devem estar sanitizados (`oc_remove_secret_manifests` + `src/anonymization.py`).
 - Preferir evidências com paths de arquivo no relatório.

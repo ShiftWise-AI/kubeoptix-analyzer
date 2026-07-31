@@ -6,3 +6,56 @@ __pycache__/
 oc-health-artifacts-*/
 *.egg-info/
 .pytest_cache/
+
+# Build artifacts (Docker/Containerfile)
+build/
+dist/
+tmp/
+cache/
+*.tar
+*.tar.gz
+*.tgz
+*.img
+*.iso
+*.layer
+
+# Docker / Podman local files
+.docker/
+.buildx-cache/
+docker-compose.override.yml
+
+# IDEs and editors
+.idea/
+.vscode/
+*.code-workspace
+
+# JetBrains
+*.iml
+out/
+
+# Eclipse / STS
+.project
+.classpath
+.settings/
+
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+
+# Emacs
+\#*\#
+.\#*

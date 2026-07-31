@@ -1,4 +1,4 @@
-"""CLI: python -m agent --artifacts ./pasta [--mode local|llm]."""
+"""CLI: PYTHONPATH=src python -m agent --artifacts ./pasta [--mode local|llm]."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from agent.local_analyze import resolve_report_path, run_local_assessment
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(_ROOT / ".env")
 
 

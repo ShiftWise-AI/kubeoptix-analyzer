@@ -110,8 +110,8 @@ devem ser executados separadamente.
 | --- | --------------- | ----------------------------------------------------------- | ----------------------- |
 | 1   | Coleta          | `oc_collect_all_namespaces.sh` ou `oc_collect_namespace.sh` | Extrai dados do cluster |
 | 2   | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>`                  | **Script**, sem agente  |
-| 3   | Anonimizar logs | `python anonymization.py <pasta>`                           | **Script**, sem agente  |
-| 4   | Assessment      | `python -m agent --artifacts <pasta> ...`                   | Local ou LLM            |
+| 3   | Anonimizar logs | `python src/anonymization.py <pasta>`                       | **Script**, sem agente  |
+| 4   | Assessment      | `PYTHONPATH=src python -m agent --artifacts <pasta> ...`    | Local ou LLM            |
 | 5   | Worker nodes    | `oc_collect_worknodes.sh -o <pasta>`                        | Extrai YAMLs dos nodes  |
 
 
@@ -175,7 +175,7 @@ Requisitos: `oc` no PATH e sessão autenticada.
 | Script                                                                           | Função                                                                                 |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `[scripts/oc_remove_secret_manifests.sh](scripts/oc_remove_secret_manifests.sh)` | Apaga manifests YAML com `kind: Secret`                                                |
-| `[anonymization.py](anonymization.py)`                                           | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
+| `[src/anonymization.py](src/anonymization.py)`                                   | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
 
 
 ```bash
@@ -183,7 +183,7 @@ Requisitos: `oc` no PATH e sessão autenticada.
 # Preview sem apagar:
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida --dry-run
 
-python anonymization.py ./pasta-saida
+python src/anonymization.py ./pasta-saida
 ```
 
 
@@ -194,7 +194,7 @@ python anonymization.py ./pasta-saida
 | Script / comando                                         | Função                                                   |
 | -------------------------------------------------------- | -------------------------------------------------------- |
 | `[scripts/run_assessment.sh](scripts/run_assessment.sh)` | Orquestra somente a extração dos namespaces e worker nodes |
-| `python -m agent`                                        | Gera o relatório a partir de uma pasta de artefatos      |
+| `PYTHONPATH=src python -m agent`                         | Gera o relatório a partir de uma pasta de artefatos      |
 
 
 
@@ -205,7 +205,7 @@ python anonymization.py ./pasta-saida
 | Script                              | Função                                                               |
 | ----------------------------------- | -------------------------------------------------------------------- |
 | `scripts/convert.sh` / `md_to_*.py` | Conversão do relatório Markdown para outros formatos (se necessário) |
-| `scripts/apply_pdf_template.py`     | Gera PDF com o template Red Hat Consulting e suporte a Mermaid       |
+| `src/scripts/apply_pdf_template.py` | Gera PDF com o template Red Hat Consulting e suporte a Mermaid       |
 
 O conversor temático é independente e não faz parte do pipeline. Ele requer
 Pandoc, Mermaid CLI e Asciidoctor PDF:
@@ -214,7 +214,7 @@ Pandoc, Mermaid CLI e Asciidoctor PDF:
 gem install --user-install asciidoctor-pdf rouge
 npm install -g @mermaid-js/mermaid-cli
 
-./scripts/apply_pdf_template.py \
+python src/scripts/apply_pdf_template.py \
   /home/parraes/Downloads/assessment-report.md \
   /home/parraes/Downloads/assessment-report-formatado.pdf \
   --customer Prodesp \
@@ -261,7 +261,7 @@ sumário. Todas as ocorrências de `<customer>` são substituídas pelo valor de
   - Percorre a árvore de artefatos
   - Identifica YAML com `kind: Secret`
   - Remove esses arquivos do disco
-2. `anonymization.py`
+2. `src/anonymization.py`
   - Percorre logs (e demais arquivos na pasta informada)
   - Detecta padrões sensíveis (documentos, contatos, tokens, certificados, credenciais, etc.)
   - Substitui/mascara os valores encontrados
@@ -287,7 +287,7 @@ Usa heurísticas locais (sem `CURSOR_API_KEY` / sem API externa).
 ```bash
 source .venv/bin/activate
 
-python -m agent \
+PYTHONPATH=src python -m agent \
   --artifacts ./pasta-saida \
   --mode local \
   --report ./assessment-report.md
@@ -304,8 +304,8 @@ source .venv/bin/activate
   --namespaces "app-a app-b" \
   -o ./pasta-saida
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python anonymization.py ./pasta-saida
-python -m agent --artifacts ./pasta-saida --mode local \
+python src/anonymization.py ./pasta-saida
+PYTHONPATH=src python -m agent --artifacts ./pasta-saida --mode local \
   --report ./pasta-saida/assessment-report.md
 ```
 
@@ -333,7 +333,7 @@ Obter a key: [https://cursor.com/dashboard/api](https://cursor.com/dashboard/api
 ```bash
 source .venv/bin/activate
 
-python -m agent \
+PYTHONPATH=src python -m agent \
   --artifacts ./pasta-saida \
   --mode llm \
   --report ./assessment-report.md
@@ -348,8 +348,8 @@ python -m agent \
   --namespaces "app-a app-b" \
   -o ./pasta-saida
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python anonymization.py ./pasta-saida
-python -m agent --artifacts ./pasta-saida --mode llm \
+python src/anonymization.py ./pasta-saida
+PYTHONPATH=src python -m agent --artifacts ./pasta-saida --mode llm \
   --report ./pasta-saida/assessment-report.md
 ```
 
@@ -402,12 +402,14 @@ ai-ocp-app-assessment/
 ├── .env.example              # Modelo de variáveis (sem secrets)
 ├── README.md                 # Esta documentação
 ├── requirements.txt          # Dependências Python do agente
-├── anonymization.py          # Anonimização de logs (script, sem IA)
-├── agent/                    # Pacote Python (local + LLM Cursor/OpenAI)
-│   ├── __main__.py           # CLI: python -m agent
-│   ├── local_analyze.py      # Assessment sem LLM
-│   ├── cursor_assess.py      # Assessment com Cursor SDK
-│   └── analysis/             # Módulos de análise (topo, recursos, logs, etc.)
+├── src/
+│   ├── anonymization.py      # Anonimização de logs (script, sem IA)
+│   ├── agent/                # Pacote Python (local + LLM Cursor/OpenAI)
+│   │   ├── __main__.py       # CLI: PYTHONPATH=src python -m agent
+│   │   ├── local_analyze.py  # Assessment sem LLM
+│   │   ├── cursor_assess.py  # Assessment com Cursor SDK
+│   │   └── analysis/         # Módulos de análise (topo, recursos, logs, etc.)
+│   └── scripts/              # Utilitários Python de conversão/template
 └── scripts/
     ├── oc_collect_namespace.sh
     ├── oc_collect_all_namespaces.sh
@@ -426,10 +428,10 @@ ai-ocp-app-assessment/
 | Objetivo                                    | Comando                                                           |
 | ------------------------------------------- | ----------------------------------------------------------------- |
 | Extrair namespaces e worker nodes           | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out`     |
-| Só relatório **sem** LLM                    | `python -m agent -a ./out --mode local -r ./assessment-report.md` |
-| Só relatório **com** LLM (Cursor)           | `python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
+| Só relatório **sem** LLM                    | `PYTHONPATH=src python -m agent -a ./out --mode local -r ./assessment-report.md` |
+| Só relatório **com** LLM (Cursor)           | `PYTHONPATH=src python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
 | Remover Secrets                             | `./scripts/oc_remove_secret_manifests.sh -d ./out`                |
-| Anonimizar logs                             | `python anonymization.py ./out`                                   |
+| Anonimizar logs                             | `python src/anonymization.py ./out`                               |
 
 
 **Lembrete:** extraia com os scripts de coleta; anonimize e remova secrets **antes** do agente; o agente só analisa a pasta já sanitizada.

@@ -71,7 +71,7 @@ bash "$COLLECT_SCRIPT" "${collect_args[@]}"
 
 # Geracao do relatorio desativada: este script executa somente a extracao.
 # cd "$ROOT_DIR"
-# python3 -m agent --artifacts "$ARTIFACTS_DIR" \
+# PYTHONPATH=src python3 -m agent --artifacts "$ARTIFACTS_DIR" \
 #   --report "$ARTIFACTS_DIR/assessment-report.md" --mode local
 
 [[ -f "$COLLECT_WORKNODES_SCRIPT" ]] || fail "Script de coleta de worker nodes nao encontrado: $COLLECT_WORKNODES_SCRIPT"

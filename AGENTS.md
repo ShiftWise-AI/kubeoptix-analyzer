@@ -5,15 +5,15 @@ Este projeto avalia aplicações OpenShift a partir de artefatos já coletados (
 ## Formas de assessment
 
 1. **Cursor Agent (sem LLM externa)** — chat/Agent do Cursor. Não precisa de `.env` / `LLM_`*.
-2. **Análise local (sem LLM)** — `python -m agent --artifacts <dir> --mode local` gera **um único** `assessment-report.md` em pt-BR.
+2. **Análise local (sem LLM)** — `PYTHONPATH=src python -m agent --artifacts <dir> --mode local` gera **um único** `assessment-report.md` em pt-BR.
 3. **Agente Python LLM** (`--use-llm`) — requer API OpenAI-compatible.
 
 ## Análise local / script
 
 ```bash
-./scripts/run_assessment.sh --artifacts ./pasta-saida --report ./assessment-report.md
+./scripts/run_assessment.sh --namespaces "app-a app-b" -o ./pasta-saida
 # ou
-python -m agent --artifacts ./pasta-saida --mode local --report ./assessment-report.md
+PYTHONPATH=src python -m agent --artifacts ./pasta-saida --mode local --report ./assessment-report.md
 ```
 
 O Markdown único deve conter: sumário, inventário, achados, arquitetura reversa (mermaid), CPU/memória, observabilidade com gráficos, ConfigMaps sensíveis e plano de ação (infra × aplicação).

@@ -12,6 +12,8 @@ fi
 
 INPUT_PATH="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PY_SCRIPTS_DIR="$ROOT_DIR/src/scripts"
 if [ -f "$INPUT_PATH" ]; then
     INPUT_DIR="$(dirname "$INPUT_PATH")"
     SINGLE_MD_FILE="$INPUT_PATH"
@@ -52,13 +54,13 @@ for md_file in "${md_files[@]}"; do
     base_name="$(basename "$md_file")"
 
     echo "[2/5] Convertendo DOCX: $base_name"
-    python3 "$SCRIPT_DIR/md2docx.py" "$md_file"
+    python3 "$PY_SCRIPTS_DIR/md2docx.py" "$md_file"
 
     echo "[3/5] Convertendo PDF: $base_name"
-    python3 "$SCRIPT_DIR/md2pdf.py" "$md_file"
+    python3 "$PY_SCRIPTS_DIR/md2pdf.py" "$md_file"
 
     echo "[4/5] Convertendo Excel: $base_name"
-    python3 "$SCRIPT_DIR/md2excel.py" \
+    python3 "$PY_SCRIPTS_DIR/md2excel.py" \
         --md-file "$md_file" \
         --files-dir "$FILES_DIR" \
         --inventory-events "$EVENTS_FILE"
@@ -66,7 +68,7 @@ for md_file in "${md_files[@]}"; do
 done
 
 echo "[5/5] Convertendo imagens e diagramas Mermaid"
-python3 "$SCRIPT_DIR/md2images.py" \
+python3 "$PY_SCRIPTS_DIR/md2images.py" \
     "$INPUT_DIR" \
     "$FILES_DIR" \
     --inventory-events "$EVENTS_FILE"
