@@ -205,6 +205,39 @@ python python_valida_logs.py ./pasta-saida
 | Script                              | Função                                                               |
 | ----------------------------------- | -------------------------------------------------------------------- |
 | `scripts/convert.sh` / `md_to_*.py` | Conversão do relatório Markdown para outros formatos (se necessário) |
+| `scripts/apply_pdf_template.py`     | Gera PDF com o template Red Hat Consulting e suporte a Mermaid       |
+
+O conversor temático é independente e não faz parte do pipeline. Ele requer
+Pandoc, Mermaid CLI e Asciidoctor PDF:
+
+```bash
+gem install --user-install asciidoctor-pdf rouge
+npm install -g @mermaid-js/mermaid-cli
+
+./scripts/apply_pdf_template.py \
+  /home/parraes/Downloads/assessment-report.md \
+  /home/parraes/Downloads/assessment-report-formatado.pdf \
+  --customer Prodesp \
+  --description "Assessment de aplicações OpenShift" \
+  --version 1.0 \
+  --status final \
+  --confidentiality Confidencial \
+  --company-logo /caminho/para/logomarca.png \
+  --author "Nome do autor" \
+  --project-manager "Nome do gerente" \
+  --document-date "Janeiro de 2026"
+```
+
+Por padrão, o script usa a pasta `template/`. Outra pasta compatível pode ser
+informada com `--template-dir`. A opção `--company-logo` é opcional, aceita PNG
+e centraliza a imagem em aproximadamente 65% da largura da capa, preservando a
+proporção e limitando a altura para não provocar quebra de página.
+O valor de `--description` é usado como título da capa. Autor, gerente do
+projeto e data são exibidos no canto inferior esquerdo; `--document-date` deve
+seguir o formato `Mês de AAAA`, por exemplo, `Janeiro de 2026`.
+O conteúdo de `template/prefacio.md` é incluído depois da capa e antes do
+sumário. Todas as ocorrências de `<customer>` são substituídas pelo valor de
+`--customer`.
 
 
 ---
