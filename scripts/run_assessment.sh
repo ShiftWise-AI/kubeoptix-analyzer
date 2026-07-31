@@ -21,6 +21,7 @@ Description:
   3. Gera relatório Markdown com achados e recomendações
      - padrão: análise local (sem LLM)
      - --use-llm: agente Python com API OpenAI-compatible
+  4. Coleta os YAMLs dos worker nodes em <output_dir>/worknodes
 
 Examples:
   ./scripts/run_assessment.sh --artifacts ./pasta-saida
@@ -37,6 +38,7 @@ fail() {
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COLLECT_SCRIPT="$SCRIPT_DIR/oc_collect_all_namespaces.sh"
+COLLECT_WORKNODES_SCRIPT="$SCRIPT_DIR/oc_collect_worknodes.sh"
 REMOVE_SECRETS_SCRIPT="$SCRIPT_DIR/oc_remove_secret_manifests.sh"
 VALIDATE_LOGS="$ROOT_DIR/python_valida_logs.py"
 
@@ -145,6 +147,12 @@ if [[ "$USE_LLM" -eq 1 ]]; then
 else
   echo "[INFO] Executando análise local (sem LLM)..."
   python3 -m agent --artifacts "$ARTIFACTS_DIR" --report "$REPORT_PATH" --mode local
+fi
+
+if [[ "$DO_COLLECT" -eq 1 ]]; then
+  [[ -f "$COLLECT_WORKNODES_SCRIPT" ]] || fail "Script de coleta de worker nodes nao encontrado: $COLLECT_WORKNODES_SCRIPT"
+  echo "[INFO] Coletando YAMLs dos worker nodes..."
+  bash "$COLLECT_WORKNODES_SCRIPT" -o "$ARTIFACTS_DIR"
 fi
 
 echo "[INFO] Assessment concluido."

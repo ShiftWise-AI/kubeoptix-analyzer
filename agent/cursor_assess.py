@@ -30,6 +30,9 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
 4. Recursos de CPU e memória
    - Lista por aplicação (requests = mínimo, limits = máximo)
    - Sumário do namespace
+   - Tabela de capacidade dos worker nodes (`worknodes/`)
+   - 3 comparativos: disponível×request, disponível×limit, disponível×otimizações
+   - Economia de recursos simplificada (CPU/memória liberadas)
    - Sugestão conservadora otimizada de CPU/memória por contêiner (Burstable, limit ≈ 2× request)
    - Sugestões de HPA (min/max, target CPU/memória) e exemplos YAML aplicáveis
    - Gráficos pizza mermaid (`pie showData`) quando houver dados

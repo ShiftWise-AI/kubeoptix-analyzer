@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent.analysis.discovery import NamespaceArtifacts
+from agent.analysis.worknodes import WorknodeCapacity
 from agent.analysis.yaml_util import (
     app_label,
     format_cpu_m,
@@ -95,6 +96,7 @@ class ResourceAnalysis:
     by_app: dict[str, AppResourceSummary] = field(default_factory=dict)
     hpas: list[HpaInfo] = field(default_factory=list)
     hpa_suggestions: list[HpaSuggestion] = field(default_factory=list)
+    worknodes: WorknodeCapacity | None = None
     ns_cpu_req_m: float = 0.0
     ns_cpu_lim_m: float = 0.0
     ns_mem_req_mi: float = 0.0
@@ -238,8 +240,11 @@ def _hpa_for_app(hpas: list[HpaInfo], app: str, workload: str) -> HpaInfo | None
     return None
 
 
-def analyze_resources(ns: NamespaceArtifacts) -> ResourceAnalysis:
-    result = ResourceAnalysis()
+def analyze_resources(
+    ns: NamespaceArtifacts,
+    worknodes: WorknodeCapacity | None = None,
+) -> ResourceAnalysis:
+    result = ResourceAnalysis(worknodes=worknodes)
     result.hpas = _parse_hpas(ns)
 
     # Primeiro passo: itens por contêiner + sugestões
@@ -443,6 +448,148 @@ spec:
 """
 
 
+def _pct(part: float, whole: float) -> str:
+    if whole <= 0:
+        return "—"
+    return f"{100.0 * part / whole:.1f}%"
+
+
+def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) -> list[str]:
+    wn = analysis.worknodes
+    lines: list[str] = [
+        "## Capacidade dos worker nodes",
+        "",
+    ]
+    if wn is None or not wn.nodes:
+        lines.extend(
+            [
+                "_Nenhum YAML em `worknodes/` encontrado. Execute "
+                "`./scripts/oc_collect_worknodes.sh -o <pasta-saida>` antes do assessment._",
+                "",
+            ]
+        )
+        return lines
+
+    lines.extend(
+        [
+            f"Fonte: `{wn.source_dir}` — valores de **allocatable** (o que o scheduler pode usar).",
+            "",
+            "| Node | CPU allocatable | Memória allocatable | CPU capacity | Memória capacity |",
+            "|------|-----------------|---------------------|--------------|------------------|",
+        ]
+    )
+    for n in wn.nodes:
+        lines.append(
+            f"| `{n.name}` | {format_cpu_m(n.cpu_alloc_m)} ({n.cpu_alloc_m:.0f}m) | "
+            f"{format_mem_mi(n.mem_alloc_mi)} | {format_cpu_m(n.cpu_cap_m)} | "
+            f"{format_mem_mi(n.mem_cap_mi)} |"
+        )
+    lines.append(
+        f"| **Total** | **{format_cpu_m(wn.total_cpu_alloc_m)}** "
+        f"(**{wn.total_cpu_alloc_m:.0f}m**) | "
+        f"**{format_mem_mi(wn.total_mem_alloc_mi)}** | "
+        f"**{format_cpu_m(wn.total_cpu_cap_m)}** | "
+        f"**{format_mem_mi(wn.total_mem_cap_mi)}** |"
+    )
+    lines.append("")
+
+    avail_cpu = wn.total_cpu_alloc_m
+    avail_mem = wn.total_mem_alloc_mi
+    req_cpu, lim_cpu = analysis.ns_cpu_req_m, analysis.ns_cpu_lim_m
+    req_mem, lim_mem = analysis.ns_mem_req_mi, analysis.ns_mem_lim_mi
+    sug_req_cpu, sug_lim_cpu = analysis.ns_sug_cpu_req_m, analysis.ns_sug_cpu_lim_m
+    sug_req_mem, sug_lim_mem = analysis.ns_sug_mem_req_mi, analysis.ns_sug_mem_lim_mi
+
+    lines.extend(
+        [
+            f"## Comparativos — workers × namespace `{ns_name}`",
+            "",
+            "### 1) Disponível × request do namespace",
+            "",
+            "| Recurso | Disponível (workers) | Request namespace | Uso do disponível | Livre |",
+            "|---------|----------------------|--------------------|-------------------|-------|",
+            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(req_cpu)} | "
+            f"{_pct(req_cpu, avail_cpu)} | {format_cpu_m(max(0, avail_cpu - req_cpu))} |",
+            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(req_mem)} | "
+            f"{_pct(req_mem, avail_mem)} | {format_mem_mi(max(0, avail_mem - req_mem))} |",
+            "",
+            "### 2) Disponível × limit do namespace",
+            "",
+            "| Recurso | Disponível (workers) | Limit namespace | Uso do disponível | Livre |",
+            "|---------|----------------------|----------------|-------------------|-------|",
+            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(lim_cpu)} | "
+            f"{_pct(lim_cpu, avail_cpu)} | {format_cpu_m(max(0, avail_cpu - lim_cpu))} |",
+            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(lim_mem)} | "
+            f"{_pct(lim_mem, avail_mem)} | {format_mem_mi(max(0, avail_mem - lim_mem))} |",
+            "",
+            "### 3) Disponível × otimizações sugeridas",
+            "",
+            "| Recurso | Disponível | Sug. request | Sug. limit | % req | % lim |",
+            "|---------|------------|--------------|------------|-------|-------|",
+            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(sug_req_cpu)} | "
+            f"{format_cpu_m(sug_lim_cpu)} | {_pct(sug_req_cpu, avail_cpu)} | "
+            f"{_pct(sug_lim_cpu, avail_cpu)} |",
+            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(sug_req_mem)} | "
+            f"{format_mem_mi(sug_lim_mem)} | {_pct(sug_req_mem, avail_mem)} | "
+            f"{_pct(sug_lim_mem, avail_mem)} |",
+            "",
+            "## Economia de recursos (simplificada)",
+            "",
+            "Comparando **valores atuais do namespace** com as **sugestões conservadoras**:",
+            "",
+        ]
+    )
+
+    eco_cpu_req = req_cpu - sug_req_cpu
+    eco_cpu_lim = lim_cpu - sug_lim_cpu
+    eco_mem_req = req_mem - sug_req_mem
+    eco_mem_lim = lim_mem - sug_lim_mem
+
+    def _eco_cell(delta: float, base: float, kind: str) -> str:
+        """delta > 0 = economia; delta < 0 = aumento (ex.: HA)."""
+        if kind == "cpu":
+            val = format_cpu_m(abs(delta))
+        else:
+            val = format_mem_mi(abs(delta))
+        pct = _pct(abs(delta), base) if base else "—"
+        if delta > 0:
+            return f"↓ {val} ({pct})"
+        if delta < 0:
+            return f"↑ {val} ({pct})"
+        return f"0 ({pct})"
+
+    lines.extend(
+        [
+            "| Comparação | CPU | Memória |",
+            "|------------|-----|---------|",
+            f"| Request atual → sugerido | {_eco_cell(eco_cpu_req, req_cpu, 'cpu')} | "
+            f"{_eco_cell(eco_mem_req, req_mem, 'mem')} |",
+            f"| Limit atual → sugerido | {_eco_cell(eco_cpu_lim, lim_cpu, 'cpu')} | "
+            f"{_eco_cell(eco_mem_lim, lim_mem, 'mem')} |",
+            "",
+            "**Leitura direta:**",
+            "",
+            "- **↓** = economia (libera capacidade no scheduler).",
+            "- **↑** = aumento sugerido (ex.: subir de 1 para ≥2 réplicas por HA).",
+            f"- Requests: CPU {_eco_cell(eco_cpu_req, req_cpu, 'cpu')}, "
+            f"memória {_eco_cell(eco_mem_req, req_mem, 'mem')}.",
+            f"- Limits: CPU {_eco_cell(eco_cpu_lim, lim_cpu, 'cpu')}, "
+            f"memória {_eco_cell(eco_mem_lim, lim_mem, 'mem')}.",
+            f"- Uso do pool de workers hoje: requests **{_pct(req_cpu, avail_cpu)}** CPU / "
+            f"**{_pct(req_mem, avail_mem)}** mem; limits **{_pct(lim_cpu, avail_cpu)}** CPU / "
+            f"**{_pct(lim_mem, avail_mem)}** mem.",
+            f"- Com otimizações: requests **{_pct(sug_req_cpu, avail_cpu)}** / "
+            f"**{_pct(sug_req_mem, avail_mem)}**; limits **{_pct(sug_lim_cpu, avail_cpu)}** / "
+            f"**{_pct(sug_lim_mem, avail_mem)}**.",
+            "",
+            "> Estimativa a partir dos manifests (sem métricas reais de uso). "
+            "Validar em homologação antes de alterar recursos em produção.",
+            "",
+        ]
+    )
+    return lines
+
+
 def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
     lines = [
         f"# Recursos de CPU e memória — `{ns_name}`",
@@ -471,11 +618,16 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
         "_Estimativa com réplicas mínimas sugeridas (≥2 quando hoje há 1). "
         "Validar com métricas reais antes de aplicar em produção._",
         "",
-        "## Por aplicação (atual)",
-        "",
-        "| Aplicação | Contêineres | Réplicas | CPU req | CPU lim | Mem req | Mem lim | Sem req | Sem lim | HPA |",
-        "|-----------|-------------|----------|---------|---------|---------|---------|---------|---------|-----|",
     ]
+    lines.extend(_render_worknode_capacity_section(ns_name, analysis))
+    lines.extend(
+        [
+            "## Por aplicação (atual)",
+            "",
+            "| Aplicação | Contêineres | Réplicas | CPU req | CPU lim | Mem req | Mem lim | Sem req | Sem lim | HPA |",
+            "|-----------|-------------|----------|---------|---------|---------|---------|---------|---------|-----|",
+        ]
+    )
     for app in sorted(analysis.by_app):
         s = analysis.by_app[app]
         lines.append(

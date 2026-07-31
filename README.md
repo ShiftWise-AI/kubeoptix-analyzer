@@ -111,6 +111,7 @@ Você pode rodar o pipeline completo de uma vez (`run_assessment.sh`) ou cada et
 | 2   | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>`                  | **Script**, sem agente  |
 | 3   | Anonimizar logs | `python python_valida_logs.py <pasta>`                      | **Script**, sem agente  |
 | 4   | Assessment      | `python -m agent --artifacts <pasta> ...`                   | Local ou LLM            |
+| 5   | Worker nodes    | `oc_collect_worknodes.sh -o <pasta>`                        | Extrai YAMLs dos nodes  |
 
 
 
@@ -129,6 +130,7 @@ Fluxo interno:
 2. Remoção de Secrets (`oc_remove_secret_manifests.sh`)
 3. Anonimização de logs (`python_valida_logs.py`)
 4. Assessment (`python -m agent`, padrão: `--mode local`)
+5. Coleta dos worker nodes (`oc_collect_worknodes.sh`)
 
 Com artefatos **já coletados e já sanitizados**:
 
@@ -151,6 +153,7 @@ Com artefatos **já coletados e já sanitizados**:
 | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | `[scripts/oc_collect_namespace.sh](scripts/oc_collect_namespace.sh)`           | Coleta artefatos de **um** namespace (deployments, services, routes, configmaps, logs, etc.) |
 | `[scripts/oc_collect_all_namespaces.sh](scripts/oc_collect_all_namespaces.sh)` | Orquestra a coleta para **vários** namespaces                                                |
+| `[scripts/oc_collect_worknodes.sh](scripts/oc_collect_worknodes.sh)`           | Coleta um manifesto YAML por worker node em `worknodes/`                                     |
 
 
 Exemplos:
@@ -164,6 +167,9 @@ Exemplos:
   --namespaces "app-a app-b" \
   -o ./pasta-saida \
   --tail-lines 300
+
+# Somente os worker nodes
+./scripts/oc_collect_worknodes.sh -o ./pasta-saida
 ```
 
 Requisitos: `oc` no PATH e sessão autenticada.

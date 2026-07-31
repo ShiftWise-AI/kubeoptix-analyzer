@@ -14,6 +14,7 @@ from agent.analysis.observability import analyze_observability, render_observabi
 from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
+from agent.analysis.worknodes import discover_worknodes
 
 
 def resolve_report_path(
@@ -72,6 +73,7 @@ def run_local_assessment(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     namespaces = discover_namespaces(artifacts_dir)
+    worknodes = discover_worknodes(artifacts_dir)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     parts: list[str] = [
@@ -90,7 +92,7 @@ def run_local_assessment(
     for ns in namespaces:
         apps = list_apps(ns)
         topo = analyze_topology(ns)
-        resources = analyze_resources(ns)
+        resources = analyze_resources(ns, worknodes=worknodes)
         obs = analyze_observability(ns, apps)
         cms = analyze_configmaps(ns)
         findings = analyze_findings(ns)
@@ -113,6 +115,12 @@ def run_local_assessment(
             f"Memória req/lim: **{resources.ns_mem_req_mi:.0f}Mi** / "
             f"**{resources.ns_mem_lim_mi:.0f}Mi**"
         )
+        if worknodes.nodes:
+            exec_summary.append(
+                f"  - Workers: **{len(worknodes.nodes)}** nodes · "
+                f"CPU allocatable **{worknodes.total_cpu_alloc_m:.0f}m** · "
+                f"Mem allocatable **{worknodes.total_mem_alloc_mi:.0f}Mi**"
+            )
 
         body_parts.extend(
             [
