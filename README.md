@@ -92,7 +92,8 @@ cp .env.example .env
 2. **Sanitização** — scripts removem arquivos `kind: Secret` e mascaram PII/tokens/certificados nos logs.
 3. **Assessment** — agente lê a pasta sanitizada e gera o relatório.
 
-Você pode rodar o pipeline completo de uma vez (`run_assessment.sh`) ou cada etapa manualmente.
+O `run_assessment.sh` orquestra somente a extração. Sanitização e assessment
+devem ser executados separadamente.
 
 ---
 
@@ -116,9 +117,9 @@ Você pode rodar o pipeline completo de uma vez (`run_assessment.sh`) ou cada et
 
 
 
-### Pipeline único (recomendado)
+### Extração orquestrada
 
-O `run_assessment.sh` executa as etapas na ordem correta:
+O `run_assessment.sh` executa as coletas em sequência:
 
 ```bash
 ./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./pasta-saida
@@ -127,16 +128,10 @@ O `run_assessment.sh` executa as etapas na ordem correta:
 Fluxo interno:
 
 1. Coleta (`oc_collect_all_namespaces.sh`)
-2. Remoção de Secrets (`oc_remove_secret_manifests.sh`)
-3. Anonimização de logs (`python_valida_logs.py`)
-4. Assessment (`python -m agent`, padrão: `--mode local`)
-5. Coleta dos worker nodes (`oc_collect_worknodes.sh`)
+2. Coleta dos worker nodes (`oc_collect_worknodes.sh`)
 
-Com artefatos **já coletados e já sanitizados**:
-
-```bash
-./scripts/run_assessment.sh --artifacts ./pasta-saida --skip-sanitize
-```
+Depois da extração, execute manualmente a remoção de Secrets, a anonimização
+dos logs e o assessment conforme as seções seguintes.
 
 ---
 
@@ -198,7 +193,7 @@ python python_valida_logs.py ./pasta-saida
 
 | Script / comando                                         | Função                                                   |
 | -------------------------------------------------------- | -------------------------------------------------------- |
-| `[scripts/run_assessment.sh](scripts/run_assessment.sh)` | Pipeline completo: coleta (opcional) → sanitize → agente |
+| `[scripts/run_assessment.sh](scripts/run_assessment.sh)` | Orquestra somente a extração dos namespaces e worker nodes |
 | `python -m agent`                                        | Gera o relatório a partir de uma pasta de artefatos      |
 
 
@@ -267,28 +262,19 @@ python -m agent \
 
 
 
-### Opção B — pipeline completo sem LLM
+### Opção B — extração e assessment sem LLM
 
 ```bash
 source .venv/bin/activate
 
 ./scripts/run_assessment.sh \
   --namespaces "app-a app-b" \
-  -o ./pasta-saida \
+  -o ./pasta-saida
+./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
+python python_valida_logs.py ./pasta-saida
+python -m agent --artifacts ./pasta-saida --mode local \
   --report ./pasta-saida/assessment-report.md
 ```
-
-
-
-### Opção C — artefatos já coletados; ainda sanitizar + assessment
-
-```bash
-./scripts/run_assessment.sh \
-  --artifacts ./pasta-saida \
-  --report ./assessment-report.md
-```
-
-(`--artifacts` pula a coleta; sanitize roda a menos que use `--skip-sanitize`.)
 
 ---
 
@@ -322,13 +308,15 @@ python -m agent \
 
 
 
-### Pipeline completo com LLM
+### Extração e assessment com LLM
 
 ```bash
 ./scripts/run_assessment.sh \
   --namespaces "app-a app-b" \
-  -o ./pasta-saida \
-  --use-llm \
+  -o ./pasta-saida
+./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
+python python_valida_logs.py ./pasta-saida
+python -m agent --artifacts ./pasta-saida --mode llm \
   --report ./pasta-saida/assessment-report.md
 ```
 
@@ -390,8 +378,9 @@ ai-ocp-app-assessment/
 └── scripts/
     ├── oc_collect_namespace.sh
     ├── oc_collect_all_namespaces.sh
+    ├── oc_collect_worknodes.sh
     ├── oc_remove_secret_manifests.sh
-    └── run_assessment.sh     # Pipeline coleta → sanitize → assessment
+    └── run_assessment.sh     # Orquestra a extração dos dados
 ```
 
 ---
@@ -403,7 +392,7 @@ ai-ocp-app-assessment/
 
 | Objetivo                                    | Comando                                                           |
 | ------------------------------------------- | ----------------------------------------------------------------- |
-| Coletar + sanitizar + relatório **sem** LLM | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out`     |
+| Extrair namespaces e worker nodes           | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out`     |
 | Só relatório **sem** LLM                    | `python -m agent -a ./out --mode local -r ./assessment-report.md` |
 | Só relatório **com** LLM (Cursor)           | `python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
 | Remover Secrets                             | `./scripts/oc_remove_secret_manifests.sh -d ./out`                |
