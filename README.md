@@ -110,7 +110,7 @@ devem ser executados separadamente.
 | --- | --------------- | ----------------------------------------------------------- | ----------------------- |
 | 1   | Coleta          | `oc_collect_all_namespaces.sh` ou `oc_collect_namespace.sh` | Extrai dados do cluster |
 | 2   | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>`                  | **Script**, sem agente  |
-| 3   | Anonimizar logs | `python python_valida_logs.py <pasta>`                      | **Script**, sem agente  |
+| 3   | Anonimizar logs | `python anonymization.py <pasta>`                           | **Script**, sem agente  |
 | 4   | Assessment      | `python -m agent --artifacts <pasta> ...`                   | Local ou LLM            |
 | 5   | Worker nodes    | `oc_collect_worknodes.sh -o <pasta>`                        | Extrai YAMLs dos nodes  |
 
@@ -175,7 +175,7 @@ Requisitos: `oc` no PATH e sessão autenticada.
 | Script                                                                           | Função                                                                                 |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `[scripts/oc_remove_secret_manifests.sh](scripts/oc_remove_secret_manifests.sh)` | Apaga manifests YAML com `kind: Secret`                                                |
-| `[python_valida_logs.py](python_valida_logs.py)`                                 | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
+| `[anonymization.py](anonymization.py)`                                           | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
 
 
 ```bash
@@ -183,7 +183,7 @@ Requisitos: `oc` no PATH e sessão autenticada.
 # Preview sem apagar:
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida --dry-run
 
-python python_valida_logs.py ./pasta-saida
+python anonymization.py ./pasta-saida
 ```
 
 
@@ -261,7 +261,7 @@ sumário. Todas as ocorrências de `<customer>` são substituídas pelo valor de
   - Percorre a árvore de artefatos
   - Identifica YAML com `kind: Secret`
   - Remove esses arquivos do disco
-2. `python_valida_logs.py`
+2. `anonymization.py`
   - Percorre logs (e demais arquivos na pasta informada)
   - Detecta padrões sensíveis (documentos, contatos, tokens, certificados, credenciais, etc.)
   - Substitui/mascara os valores encontrados
@@ -304,7 +304,7 @@ source .venv/bin/activate
   --namespaces "app-a app-b" \
   -o ./pasta-saida
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python python_valida_logs.py ./pasta-saida
+python anonymization.py ./pasta-saida
 python -m agent --artifacts ./pasta-saida --mode local \
   --report ./pasta-saida/assessment-report.md
 ```
@@ -348,7 +348,7 @@ python -m agent \
   --namespaces "app-a app-b" \
   -o ./pasta-saida
 ./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python python_valida_logs.py ./pasta-saida
+python anonymization.py ./pasta-saida
 python -m agent --artifacts ./pasta-saida --mode llm \
   --report ./pasta-saida/assessment-report.md
 ```
@@ -402,7 +402,7 @@ ai-ocp-app-assessment/
 ├── .env.example              # Modelo de variáveis (sem secrets)
 ├── README.md                 # Esta documentação
 ├── requirements.txt          # Dependências Python do agente
-├── python_valida_logs.py     # Anonimização de logs (script, sem IA)
+├── anonymization.py          # Anonimização de logs (script, sem IA)
 ├── agent/                    # Pacote Python (local + LLM Cursor/OpenAI)
 │   ├── __main__.py           # CLI: python -m agent
 │   ├── local_analyze.py      # Assessment sem LLM
@@ -429,7 +429,7 @@ ai-ocp-app-assessment/
 | Só relatório **sem** LLM                    | `python -m agent -a ./out --mode local -r ./assessment-report.md` |
 | Só relatório **com** LLM (Cursor)           | `python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
 | Remover Secrets                             | `./scripts/oc_remove_secret_manifests.sh -d ./out`                |
-| Anonimizar logs                             | `python python_valida_logs.py ./out`                              |
+| Anonimizar logs                             | `python anonymization.py ./out`                                   |
 
 
 **Lembrete:** extraia com os scripts de coleta; anonimize e remova secrets **antes** do agente; o agente só analisa a pasta já sanitizada.
