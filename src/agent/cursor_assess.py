@@ -30,20 +30,21 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
    - 2.5 Secrets referenciados (tabela; sem reproduzir conteúdo)
    - 2.6 Operadores presentes no namespace / ClusterServiceVersions (**obrigatoriamente em tabela Markdown**, nunca em prosa/lista inline)
      Colunas: Operador (displayName) | CSV | Versão | Phase | Upgrade disponível | Provider | Evidência (path do YAML)
-     Upgrade disponível = Subscription.status.state (`AtLatestKnown`, `UpgradeAvailable`, `UpgradePending`, `UpgradeFailed`) ou inferido via PackageManifest; `—` se sem evidência
+     Upgrade disponível = valor de `status.state` (buscar no atributo `status` do CSV ou da Subscription correspondente: propriedade `state:`). Exemplos: `AtLatestKnown`, `UpgradeAvailable`, `UpgradePending`, `UpgradeFailed`. Sem `status.state`, inferir via PackageManifest; `—` se sem evidência
      Fonte: `<ns>/resources/clusterserviceversions.operators.coreos.com/`, `subscriptions.operators.coreos.com/`, `packagemanifests.packages.operators.coreos.com/`
 3. Arquitetura reversa
    - Baseada em Deployments, Services, Routes e ConfigMaps
    - Inclua um diagrama mermaid flowchart TB simples (Usuário → apps e apps → apps)
    - Sem sintaxe inválida no mermaid (não use parênteses em rótulos de aresta)
 4. Recursos de CPU e memória
-   - Lista por aplicação (requests = mínimo, limits = máximo)
+   - 4.1 Lista por aplicação (requests/limits) **com coluna QoS** e **legenda QoS abaixo da tabela** (Guaranteed / Burstable / BestEffort)
    - Sumário do namespace
-   - Tabela de capacidade dos worker nodes (`worknodes/`)
+   - 4.3 Tabela de capacidade dos worker nodes (`worknodes/`) com **legenda abaixo** das colunas de CPU/memória (allocatable vs capacity)
    - 3 comparativos: disponível×request, disponível×limit, disponível×otimizações
    - Economia de recursos simplificada (CPU/memória liberadas)
    - Sugestão conservadora otimizada de CPU/memória por contêiner (Burstable, limit ≈ 2× request)
    - Sugestões de HPA (min/max, target CPU/memória) e exemplos YAML aplicáveis
+   - Item de **boas práticas de affinity / anti-affinity** (inventário nos workloads + recomendações podAntiAffinity, nodeAffinity, topologia)
    - Gráficos pizza mermaid (`pie showData`) quando houver dados
 5. Observabilidade (métricas, logs, monitoramento)
    - Oportunidades de rastreabilidade e correção de erros

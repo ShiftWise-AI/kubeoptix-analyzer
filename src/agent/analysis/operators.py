@@ -51,31 +51,63 @@ def _package_name(doc: dict[str, Any], csv_name: str) -> str:
         val = str(ann.get(key) or labels.get(key) or "").strip()
         if val:
             return val
-    # Heurística: nome do CSV até ".v" (ex.: redis-operator.v0.15.1 → redis-operator)
     if ".v" in csv_name:
         return csv_name.split(".v", 1)[0]
     return csv_name
 
 
+def _extract_status_state(doc: dict[str, Any]) -> str:
+    """Extrai `status.state` (propriedade OLM). Busca direta e, se ausente, aninhada."""
+    status = doc.get("status")
+    if not isinstance(status, dict):
+        return ""
+
+    direct = status.get("state")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    if direct is not None and not isinstance(direct, (dict, list)):
+        text = str(direct).strip()
+        if text:
+            return text
+
+    # Busca aninhada por propriedade `state:` dentro de status
+    found: list[str] = []
+
+    def walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key == "state" and not isinstance(value, (dict, list)):
+                    text = str(value).strip()
+                    if text:
+                        found.append(text)
+                else:
+                    walk(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                walk(item)
+
+    walk(status)
+    return found[0] if found else ""
+
+
 def _subscription_states(ns: NamespaceArtifacts) -> dict[str, str]:
-    """Mapa installedCSV/currentCSV → status.state da Subscription."""
+    """Mapa installedCSV/currentCSV/package → status.state da Subscription."""
     by_csv: dict[str, str] = {}
     for path in ns.subscriptions:
         for doc in load_yaml_docs(path):
             kind = str(doc.get("kind") or "")
             if kind and kind != "Subscription":
                 continue
-            status = doc.get("status") or {}
-            state = str(status.get("state") or "").strip()
+            state = _extract_status_state(doc)
             if not state:
                 continue
+            status = doc.get("status") or {}
             for key in ("installedCSV", "currentCSV"):
                 csv = str(status.get(key) or "").strip()
                 if csv:
                     by_csv[csv] = state
-            # Também indexa pelo package da Subscription (spec.name)
             pkg = str((doc.get("spec") or {}).get("name") or "").strip()
-            if pkg and pkg not in by_csv:
+            if pkg:
                 by_csv[f"pkg:{pkg}"] = state
     return by_csv
 
@@ -89,11 +121,7 @@ def _packagemanifest_current_csv(ns: NamespaceArtifacts) -> dict[str, str]:
             if kind and kind != "PackageManifest":
                 continue
             status = doc.get("status") or {}
-            pkg = str(
-                status.get("packageName")
-                or meta_name(doc)
-                or ""
-            ).strip()
+            pkg = str(status.get("packageName") or meta_name(doc) or "").strip()
             if not pkg:
                 continue
             default = str(status.get("defaultChannel") or "").strip()
@@ -105,28 +133,33 @@ def _packagemanifest_current_csv(ns: NamespaceArtifacts) -> dict[str, str]:
                 if default and str(ch.get("name") or "") == default:
                     current = str(ch.get("currentCSV") or "").strip()
                     break
-            if not current and channels:
-                ch0 = channels[0] if isinstance(channels[0], dict) else {}
-                current = str(ch0.get("currentCSV") or "").strip()
+            if not current and channels and isinstance(channels[0], dict):
+                current = str(channels[0].get("currentCSV") or "").strip()
             if current:
                 by_pkg[pkg] = current
     return by_pkg
 
 
 def _resolve_upgrade_state(
+    csv_doc: dict[str, Any],
     csv_name: str,
     package: str,
     sub_states: dict[str, str],
     pm_current: dict[str, str],
 ) -> str:
-    # 1) Subscription.status.state (fonte canônica OLM)
+    # 1) status.state no próprio YAML (CSV ou recurso com state)
+    own_state = _extract_status_state(csv_doc)
+    if own_state:
+        return own_state
+
+    # 2) status.state da Subscription OLM correspondente
     if csv_name in sub_states:
         return sub_states[csv_name]
     pkg_key = f"pkg:{package}"
     if pkg_key in sub_states:
         return sub_states[pkg_key]
 
-    # 2) Inferência via PackageManifest (canal default)
+    # 3) Inferência via PackageManifest (canal default)
     latest = pm_current.get(package)
     if not latest:
         return _STATE_UNKNOWN
@@ -160,7 +193,7 @@ def analyze_operators(ns: NamespaceArtifacts) -> OperatorsResult:
                     phase=str(status.get("phase") or "—").strip() or "—",
                     provider=_provider_name(spec) or "—",
                     upgrade_state=_resolve_upgrade_state(
-                        name, package, sub_states, pm_current
+                        doc, name, package, sub_states, pm_current
                     ),
                     path=_rel_path(ns.root, path),
                 )
@@ -204,11 +237,12 @@ def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
             )
     lines.append("")
     lines.append(
-        "Coluna **Upgrade disponível**: `status.state` da Subscription OLM "
-        f"(`{_STATE_AT_LATEST}`, `{_STATE_UPGRADE_AVAILABLE}`, "
-        "`UpgradePending`, `UpgradeFailed`) quando houver Subscription nos "
-        "artefatos; senão, inferido pelo `currentCSV` do PackageManifest "
-        f"(canal default); `{_STATE_UNKNOWN}` se não houver evidência."
+        "Coluna **Upgrade disponível**: valor da propriedade `status.state` "
+        "(no CSV ou na Subscription OLM correspondente). Exemplos: "
+        f"`{_STATE_AT_LATEST}`, `{_STATE_UPGRADE_AVAILABLE}`, "
+        "`UpgradePending`, `UpgradeFailed`. Sem `status.state` nos artefatos, "
+        "infere-se pelo `currentCSV` do PackageManifest (canal default); "
+        f"`{_STATE_UNKNOWN}` se não houver evidência."
     )
     lines.append("")
     lines.append(

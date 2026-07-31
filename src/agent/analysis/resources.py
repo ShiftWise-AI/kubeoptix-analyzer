@@ -39,12 +39,71 @@ class ContainerResources:
     cpu_lim_m: float | None
     mem_req_mi: float | None
     mem_lim_mi: float | None
+    qos_class: str = "BestEffort"
     # Sugestões por contêiner (já arredondadas)
     sug_cpu_req_m: float = 0.0
     sug_cpu_lim_m: float = 0.0
     sug_mem_req_mi: float = 0.0
     sug_mem_lim_mi: float = 0.0
     suggestion_notes: list[str] = field(default_factory=list)
+    has_affinity: bool = False
+    has_pod_anti_affinity: bool = False
+    has_pod_affinity: bool = False
+    has_node_affinity: bool = False
+
+
+@dataclass
+class AffinityInventory:
+    workload: str
+    kind: str
+    app: str
+    has_node_affinity: bool = False
+    has_pod_affinity: bool = False
+    has_pod_anti_affinity: bool = False
+
+
+def qos_class_for_container(
+    cpu_req: float | None,
+    cpu_lim: float | None,
+    mem_req: float | None,
+    mem_lim: float | None,
+) -> str:
+    """QoS aproximado por contêiner (mesma regra do kubelet em pod de 1 contêiner)."""
+    has_any_req = cpu_req is not None or mem_req is not None
+    has_any_lim = cpu_lim is not None or mem_lim is not None
+    if not has_any_req and not has_any_lim:
+        return "BestEffort"
+    cpu_guaranteed = (
+        cpu_req is not None
+        and cpu_lim is not None
+        and abs(cpu_req - cpu_lim) < 1e-6
+    )
+    mem_guaranteed = (
+        mem_req is not None
+        and mem_lim is not None
+        and abs(mem_req - mem_lim) < 1e-6
+    )
+    if (
+        cpu_req is not None
+        and cpu_lim is not None
+        and mem_req is not None
+        and mem_lim is not None
+        and cpu_guaranteed
+        and mem_guaranteed
+    ):
+        return "Guaranteed"
+    return "Burstable"
+
+
+def _affinity_flags(template_spec: dict[str, Any]) -> tuple[bool, bool, bool]:
+    affinity = template_spec.get("affinity") or {}
+    if not isinstance(affinity, dict):
+        return False, False, False
+    return (
+        bool(affinity.get("nodeAffinity")),
+        bool(affinity.get("podAffinity")),
+        bool(affinity.get("podAntiAffinity")),
+    )
 
 
 @dataclass
@@ -96,6 +155,7 @@ class ResourceAnalysis:
     by_app: dict[str, AppResourceSummary] = field(default_factory=dict)
     hpas: list[HpaInfo] = field(default_factory=list)
     hpa_suggestions: list[HpaSuggestion] = field(default_factory=list)
+    affinities: list[AffinityInventory] = field(default_factory=list)
     worknodes: WorknodeCapacity | None = None
     ns_cpu_req_m: float = 0.0
     ns_cpu_lim_m: float = 0.0
@@ -254,6 +314,20 @@ def analyze_resources(
             name = meta_name(doc)
             app = app_label(doc, name)
             replicas, containers = _containers_from_workload(doc)
+            template_spec = (
+                ((doc.get("spec") or {}).get("template") or {}).get("spec")
+            ) or {}
+            node_aff, pod_aff, pod_anti = _affinity_flags(template_spec)
+            result.affinities.append(
+                AffinityInventory(
+                    workload=name,
+                    kind=str(kind),
+                    app=app,
+                    has_node_affinity=node_aff,
+                    has_pod_affinity=pod_aff,
+                    has_pod_anti_affinity=pod_anti,
+                )
+            )
             for c in containers:
                 res = c.get("resources") or {}
                 req = res.get("requests") or {}
@@ -280,11 +354,18 @@ def analyze_resources(
                     cpu_lim_m=cpu_lim,
                     mem_req_mi=mem_req,
                     mem_lim_mi=mem_lim,
+                    qos_class=qos_class_for_container(
+                        cpu_req, cpu_lim, mem_req, mem_lim
+                    ),
                     sug_cpu_req_m=sug_cpu_req,
                     sug_cpu_lim_m=sug_cpu_lim,
                     sug_mem_req_mi=sug_mem_req,
                     sug_mem_lim_mi=sug_mem_lim,
                     suggestion_notes=notes_cpu + notes_mem,
+                    has_affinity=node_aff or pod_aff or pod_anti,
+                    has_pod_anti_affinity=pod_anti,
+                    has_pod_affinity=pod_aff,
+                    has_node_affinity=node_aff,
                 )
                 result.items.append(item)
 
@@ -491,7 +572,21 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
         f"**{format_cpu_m(wn.total_cpu_cap_m)}** | "
         f"**{format_mem_mi(wn.total_mem_cap_mi)}** |"
     )
-    lines.append("")
+    lines.extend(
+        [
+            "",
+            "**Legenda — colunas de CPU e memória**",
+            "",
+            "- **CPU allocatable / Memória allocatable**: capacidade efetiva que o "
+            "scheduler pode usar para pods (`status.allocatable`). Já desconta "
+            "reservas do sistema/kubelet.",
+            "- **CPU capacity / Memória capacity**: capacidade bruta do node "
+            "(`status.capacity`), incluindo o que fica reservado à plataforma.",
+            "- Use **allocatable** nos comparativos de sizing do namespace; "
+            "**capacity** serve apenas como referência do hardware.",
+            "",
+        ]
+    )
 
     avail_cpu = wn.total_cpu_alloc_m
     avail_mem = wn.total_mem_alloc_mi
@@ -624,24 +719,39 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
         [
             "## Por aplicação (atual)",
             "",
-            "| Aplicação | Contêineres | Réplicas | CPU req | CPU lim | Mem req | Mem lim | Sem req | Sem lim | HPA |",
-            "|-----------|-------------|----------|---------|---------|---------|---------|---------|---------|-----|",
+            "| Aplicação | Contêiner | Réplicas | CPU req | CPU lim | Mem req | Mem lim | QoS | HPA |",
+            "|-----------|-----------|----------|---------|---------|---------|---------|-----|-----|",
         ]
     )
-    for app in sorted(analysis.by_app):
-        s = analysis.by_app[app]
-        lines.append(
-            f"| `{app}` | {s.containers} | {s.replicas} | "
-            f"{format_cpu_m(s.cpu_req_m)} | {format_cpu_m(s.cpu_lim_m)} | "
-            f"{format_mem_mi(s.mem_req_mi)} | {format_mem_mi(s.mem_lim_mi)} | "
-            f"{s.missing_requests} | {s.missing_limits} | "
-            f"{'sim' if s.has_hpa else 'não'} |"
-        )
-    if not analysis.by_app:
-        lines.append("| — | — | — | — | — | — | — | — | — | — |")
+    if analysis.items:
+        for item in sorted(
+            analysis.items, key=lambda i: (i.app, i.workload, i.container)
+        ):
+            summary = analysis.by_app.get(item.app)
+            hpa = "sim" if summary and summary.has_hpa else "não"
+            lines.append(
+                f"| `{item.app}` | `{item.container}` | {item.replicas} | "
+                f"{format_cpu_m(item.cpu_req_m)} | {format_cpu_m(item.cpu_lim_m)} | "
+                f"{format_mem_mi(item.mem_req_mi)} | {format_mem_mi(item.mem_lim_mi)} | "
+                f"{item.qos_class} | {hpa} |"
+            )
+    else:
+        lines.append("| — | — | — | — | — | — | — | — | — |")
 
     lines.extend(
         [
+            "",
+            "**Legenda — coluna QoS**",
+            "",
+            "- **Guaranteed**: CPU e memória com `request = limit` — maior prioridade "
+            "de scheduling/eviction; sem burst além do request.",
+            "- **Burstable**: há request e/ou limit, porém `request < limit` (ou só "
+            "um dos dois completo) — pode usar burst até o limit; prioridade intermediária.",
+            "- **BestEffort**: sem `requests` nem `limits` — menor prioridade; primeiro "
+            "candidato a eviction sob pressão de memória no node.",
+            "",
+            "> **Requests** = mínimo reservado pelo scheduler. "
+            "**Limits** = teto máximo do contêiner.",
             "",
             "## Sugestão conservadora por contêiner",
             "",
@@ -755,5 +865,67 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
     lines.extend(_pie("Memoria limits Mi por aplicacao", mem_counter))
     lines.extend(["", "## Gráfico pizza — CPU limits atuais por aplicação (millicores)", ""])
     lines.extend(_pie("CPU limits m por aplicacao", cpu_counter))
+    lines.extend(["", *_render_affinity_section(analysis)])
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_affinity_section(analysis: ResourceAnalysis) -> list[str]:
+    lines = [
+        "## Affinity e anti-affinity — boas práticas",
+        "",
+        "Inventário nos workloads analisados:",
+        "",
+        "| Workload | App | nodeAffinity | podAffinity | podAntiAffinity |",
+        "|----------|-----|--------------|-------------|-----------------|",
+    ]
+    if analysis.affinities:
+        for aff in sorted(analysis.affinities, key=lambda a: a.workload):
+            lines.append(
+                f"| `{aff.workload}` | `{aff.app}` | "
+                f"{'sim' if aff.has_node_affinity else 'não'} | "
+                f"{'sim' if aff.has_pod_affinity else 'não'} | "
+                f"{'sim' if aff.has_pod_anti_affinity else 'não'} |"
+            )
+    else:
+        lines.append("| — | — | — | — | — |")
+
+    without_anti = [
+        a for a in analysis.affinities if a.has_pod_anti_affinity is False
+    ]
+    lines.extend(
+        [
+            "",
+            "**Boas práticas sugeridas**",
+            "",
+            "1. **podAntiAffinity (obrigatório para HA)** — para Deployments com "
+            "≥2 réplicas, preferir `requiredDuringSchedulingIgnoredDuringExecution` "
+            "(ou `preferred…` em clusters pequenos) com "
+            "`topologyKey: kubernetes.io/hostname`, para espalhar pods em nodes distintos.",
+            "2. **Evitar single point of failure** — réplica única + ausência de "
+            "anti-affinity concentra risco; combine minReplicas≥2 (HPA/Deployment) "
+            "com anti-affinity.",
+            "3. **nodeAffinity / nodeSelector** — use para direcionar a pools "
+            "(worker, infra, GPU) via labels; evite hard-coding de nomes de node.",
+            "4. **podAffinity** — reserve para componentes que realmente precisam "
+            "de localidade (cache local, volumes, latência); uso excessivo gera "
+            "hotspots.",
+            "5. **Zonas** — em clusters multi-AZ, considere "
+            "`topology.kubernetes.io/zone` além de hostname para resiliência a "
+            "falha de zona.",
+            "6. **Não conflitar com taints/tolerations** — affinity deve ser "
+            "coerente com taints dos pools (infra/ODF) para não deixar pods Pending.",
+            "",
+        ]
+    )
+    if without_anti:
+        names = ", ".join(f"`{a.workload}`" for a in without_anti[:8])
+        extra = f" (+{len(without_anti) - 8} outros)" if len(without_anti) > 8 else ""
+        lines.extend(
+            [
+                f"_Nenhum `podAntiAffinity` encontrado em: {names}{extra}. "
+                "Priorizar esta melhoria nos workloads críticos._",
+                "",
+            ]
+        )
+    return lines
