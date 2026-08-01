@@ -211,8 +211,13 @@ flowchart TD
     L -->|Cursor| M[Cursor SDK prompt over artifact directory]
     L -->|OpenAI-compatible| N[Inventory artifacts and expose local tools]
     N --> O[Tool-driven ReAct loop]
+    F -->|embedded| Q[Run deterministic local analysis]
+    Q --> R[Heuristic reranking and workload risk scoring]
+    R --> S[Log clustering and resource outlier detection]
+    S --> T[Compact evidence summary to local OpenAI-compatible model]
     M --> P[Write Markdown report]
     O --> P
+    T --> P
 ```
 
 ## What local mode analyzes

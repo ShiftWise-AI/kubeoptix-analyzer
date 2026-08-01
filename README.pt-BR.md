@@ -211,8 +211,13 @@ flowchart TD
     L -->|Cursor| M[Prompt via Cursor SDK sobre o diretorio]
     L -->|OpenAI-compatible| N[Inventaria artefatos e expoe tools locais]
     N --> O[Loop ReAct dirigido por tools]
+    F -->|embedded| Q[Executa a analise local deterministica]
+    Q --> R[Aplica reranking heuristico e score de risco]
+    R --> S[Agrupa erros de log e detecta outliers]
+    S --> T[Envia resumo compacto para modelo local OpenAI-compatible]
     M --> P[Grava relatorio Markdown]
     O --> P
+    T --> P
 ```
 
 ## O que o modo local analisa
