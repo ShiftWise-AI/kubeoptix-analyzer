@@ -228,3 +228,9 @@ python -m agent --artifacts ./artifacts --mode llm
 - O analyzer e offline em relacao ao cluster. Ele apenas le artefatos locais.
 - A qualidade do relatorio depende da completude dos artefatos coletados.
 - O modo LLM nao substitui a sanitizacao dos artefatos. A remocao de dados sensiveis deve acontecer antes, no pipeline do harvester.
+
+## Versoes do documento
+
+- [English](README.md)
+- [PT-BR](README.pt-BR.md)
+- [Italiano](README.it.md)
