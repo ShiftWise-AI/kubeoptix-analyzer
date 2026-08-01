@@ -101,6 +101,15 @@ LLM mode now validates the `.env` file before running:
 - if `.env` does not exist, execution stops with a friendly error
 - if both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, execution stops with a friendly error
 
+Embedded mode uses a local OpenAI-compatible endpoint. Example with Ollama and a quantized Mistral 7B Instruct variant:
+
+```dotenv
+EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
+EMBEDDED_API_KEY=ollama
+EMBEDDED_MODEL=mistral
+EMBEDDED_TIMEOUT_S=120
+```
+
 ## Execution flow
 
 ### 1. Prepare or collect artifacts
@@ -136,6 +145,12 @@ LLM mode:
 ./run.sh --artifacts ./artifacts --mode llm
 ```
 
+Embedded mode:
+
+```bash
+./run.sh --artifacts ./artifacts --mode embedded
+```
+
 Custom report path:
 
 ```bash
@@ -156,6 +171,15 @@ Custom report path:
 - if `CURSOR_API_KEY` is set, uses Cursor SDK
 - otherwise, if `LLM_API_KEY` is set, uses an OpenAI-compatible API and a tool-driven ReAct loop
 - writes a single Markdown report to the artifact directory or the path passed with `--report`
+
+`embedded`
+
+- runs the deterministic local analysis first
+- computes heuristic classification + reranking of findings
+- clusters repeated log errors by normalized signature
+- scores workload risk using findings, logs, QoS, missing limits/requests, and replica posture
+- detects requests/limits outliers with IQR-based analysis
+- sends only the compact evidence summary to a local OpenAI-compatible model such as Ollama + Mistral
 
 ### 5. Review the output
 
@@ -221,6 +245,12 @@ Run LLM analysis directly:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode llm
+```
+
+Run embedded analysis directly:
+
+```bash
+python -m agent --artifacts ./artifacts --mode embedded
 ```
 
 ## Notes

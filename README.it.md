@@ -101,6 +101,15 @@ La modalita LLM ora valida il file `.env` prima dell'esecuzione:
 - se `.env` non esiste, l'esecuzione si interrompe con un errore leggibile
 - se `CURSOR_API_KEY` e `LLM_API_KEY` sono entrambe vuote, l'esecuzione si interrompe con un errore leggibile
 
+La modalita embedded usa un endpoint locale OpenAI-compatible. Esempio con Ollama e una variante quantizzata di Mistral 7B Instruct:
+
+```dotenv
+EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
+EMBEDDED_API_KEY=ollama
+EMBEDDED_MODEL=mistral
+EMBEDDED_TIMEOUT_S=120
+```
+
 ## Flusso di esecuzione
 
 ### 1. Preparare o raccogliere gli artefatti
@@ -136,6 +145,12 @@ Modalita LLM:
 ./run.sh --artifacts ./artifacts --mode llm
 ```
 
+Modalita embedded:
+
+```bash
+./run.sh --artifacts ./artifacts --mode embedded
+```
+
 Percorso personalizzato del report:
 
 ```bash
@@ -156,6 +171,15 @@ Percorso personalizzato del report:
 - se `CURSOR_API_KEY` e impostata, usa Cursor SDK
 - altrimenti, se `LLM_API_KEY` e impostata, usa una API OpenAI-compatible e un loop ReAct guidato da tool
 - scrive un unico report Markdown nella directory degli artefatti o nel percorso passato con `--report`
+
+`embedded`
+
+- esegue prima l'analisi locale deterministica
+- calcola classificazione euristica + reranking dei findings
+- raggruppa gli errori di log ripetuti per firma normalizzata
+- calcola un punteggio di rischio per workload usando findings, log, QoS, assenza di limits/requests e postura delle repliche
+- rileva outlier di requests/limits con analisi basata su IQR
+- invia solo un riassunto compatto delle evidenze a un modello locale OpenAI-compatible, come Ollama + Mistral
 
 ### 5. Verificare l'output
 
@@ -221,6 +245,12 @@ Eseguire direttamente l'analisi LLM:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode llm
+```
+
+Eseguire direttamente l'analisi embedded:
+
+```bash
+python -m agent --artifacts ./artifacts --mode embedded
 ```
 
 ## Note

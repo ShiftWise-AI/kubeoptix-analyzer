@@ -1,4 +1,4 @@
-"""CLI: PYTHONPATH=src python -m agent --artifacts ./pasta [--mode local|llm]."""
+"""CLI: PYTHONPATH=src python -m agent --artifacts ./pasta [--mode local|llm|embedded]."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from agent.config import validate_llm_env
+from agent.config import get_embedded_settings, validate_llm_env
 from agent.local_analyze import resolve_report_path, run_local_assessment
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +17,7 @@ load_dotenv(_ROOT / ".env")
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Assessment OpenShift: análise local ou LLM (Cursor SDK / OpenAI-compatible)."
+        description="Assessment OpenShift: análise local, LLM remoto, ou IA embarcada local."
     )
     parser.add_argument(
         "--artifacts",
@@ -36,11 +36,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=("local", "llm"),
+        choices=("local", "llm", "embedded"),
         default="local",
         help=(
             "local = heurísticas sem LLM; "
-            "llm = Cursor SDK (CURSOR_API_KEY) ou API OpenAI-compatible (LLM_API_KEY)"
+            "llm = Cursor SDK (CURSOR_API_KEY) ou API OpenAI-compatible (LLM_API_KEY); "
+            "embedded = heurísticas + modelo local OpenAI-compatible (ex.: Ollama/Mistral)"
         ),
     )
     args = parser.parse_args()
@@ -50,6 +51,13 @@ def main() -> None:
 
     if args.mode == "local":
         out = run_local_assessment(artifacts, report)
+        print(f"[agent] Relatório gravado em: {out}")
+        return
+
+    if args.mode == "embedded":
+        from agent.embedded_assess import run_embedded_assessment
+
+        out = run_embedded_assessment(artifacts, report, get_embedded_settings())
         print(f"[agent] Relatório gravado em: {out}")
         return
 

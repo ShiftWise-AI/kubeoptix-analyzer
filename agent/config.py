@@ -23,6 +23,14 @@ class Settings:
     max_file_chars: int = 20_000
 
 
+@dataclass(frozen=True)
+class EmbeddedSettings:
+    api_key: str
+    base_url: str
+    model: str
+    timeout_s: int = 120
+
+
 def validate_llm_env() -> None:
     if not _ENV_FILE.is_file():
         raise SystemExit(
@@ -69,4 +77,15 @@ def get_settings() -> Settings:
         llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
         max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "20")),
         max_file_chars=int(os.getenv("AGENT_MAX_FILE_CHARS", "20000")),
+    )
+
+
+def get_embedded_settings() -> EmbeddedSettings:
+    return EmbeddedSettings(
+        api_key=os.getenv("EMBEDDED_API_KEY", "ollama").strip() or "ollama",
+        base_url=os.getenv("EMBEDDED_BASE_URL", "http://127.0.0.1:11434/v1").rstrip(
+            "/"
+        ),
+        model=os.getenv("EMBEDDED_MODEL", "mistral").strip() or "mistral",
+        timeout_s=int(os.getenv("EMBEDDED_TIMEOUT_S", "120")),
     )
