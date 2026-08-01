@@ -1,437 +1,230 @@
-# AI OCP App Assessment
+# kubeoptix-analyzer
 
-Ferramenta para **assessment de aplicações OpenShift**: coleta artefatos do cluster, **anonimiza e remove secrets por scripts** (sem participação do agente de IA) e gera um relatório Markdown em português do Brasil.
+Offline analyzer for OpenShift and Kubernetes application artifacts. It reads previously collected manifests, logs, and worker-node inventories, then generates a single Markdown assessment report.
 
----
+Language versions: [PT-BR](README.pt-BR.md) | [Italiano](README.it.md)
 
-## Índice
+## Overview
 
-1. [Visão geral](#visão-geral)
-2. [Pré-requisitos](#pré-requisitos)
-3. [Instalação](#instalação)
-4. [Fluxo de trabalho](#fluxo-de-trabalho)
-5. [Pipeline — ordem de execução](#pipeline--ordem-de-execução)
-6. [Scripts](#scripts)
-7. [Anonimização e remoção de secrets](#anonimização-e-remoção-de-secrets)
-8. [Executar sem LLM](#executar-sem-llm)
-9. [Executar com LLM](#executar-com-llm)
-10. [Conteúdo do relatório](#conteúdo-do-relatório)
-11. [Estrutura do repositório](#estrutura-do-repositório)
+This project is the analysis stage of the KubeOptix workflow.
 
----
+- `kubeoptix-harvester` connects to a live OpenShift cluster, collects artifacts, removes `Secret` manifests, and anonymizes sensitive values.
+- `kubeoptix-analyzer` consumes those prepared artifacts and produces an assessment report.
 
+The upstream extraction and data-treatment process is documented in the harvester README:
 
+- https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
 
-## Visão geral
+According to that document, the artifact pipeline is:
 
-O processo tem **duas fases bem separadas**:
+1. Collect worker-node manifests.
+2. Collect namespace resources and pod logs.
+3. Remove YAML files whose `kind` is `Secret`.
+4. Anonymize sensitive patterns in-place, including emails, tokens, certificates, keys, and other secrets.
 
+This analyzer assumes those steps already happened before analysis starts.
 
-| Fase                          | Quem executa        | O quê                                                                              |
-| ----------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
-| **1. Extração e sanitização** | Scripts bash/Python | Coleta YAML/logs do OpenShift, remove Secrets e anonimiza dados sensíveis nos logs |
-| **2. Assessment**             | Agente local ou LLM | Lê apenas artefatos já sanitizados e gera o relatório Markdown                     |
+## Requirements
 
+- Python 3.9+
+- Bash
+- An artifact directory produced by `kubeoptix-harvester` or another compatible collector
 
-**Importante:**
-
-- Os dados **precisam ser extraídos pelos scripts de coleta** (`oc_collect_`*).
-- A **anonimização e a remoção de secrets são feitas só pelos scripts**, **sem interação do agente de IA**.
-- O agente (local ou LLM) **não** deve coletar do cluster nem manipular secrets; ele analisa a pasta de artefatos já preparada.
-
----
-
-
-
-## Pré-requisitos
-
-- `oc` instalado e sessão autenticada no cluster (`oc login` / `oc whoami`)
-- Python 3.10+
-- Acesso de leitura aos namespaces a avaliar
-
-Para modo LLM com Cursor:
-
-- Assinatura Cursor e API key em [cursor.com/dashboard/api](https://cursor.com/dashboard/api)
-
----
-
-
-
-## Instalação
+## Installation
 
 ```bash
-git clone <url-deste-repositorio>
-cd ai-ocp-app-assessment
-
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-
-cp .env.example .env
-# Edite .env apenas se for usar --mode llm (CURSOR_API_KEY)
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
----
+## Supported input layout
 
+The analyzer supports both of these layouts:
 
-
-## Fluxo de trabalho
+1. Resource-centric layout:
 
 ```text
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
-│ 1. Coleta (oc)  │────▶│ 2. Sanitização       │────▶│ 3. Assessment       │
-│ scripts bash    │     │ (scripts, sem IA)    │     │ local ou LLM        │
-└─────────────────┘     └──────────────────────┘     └─────────────────────┘
-        │                         │                            │
-        ▼                         ▼                            ▼
-  YAML + logs               Secrets removidos           assessment-report.md
-  por namespace             Logs anonimizados           (único arquivo pt-BR)
+<artifacts>/
+  worknodes/
+  <namespace>/
+    resources/
+      deployments.apps/
+      services/
+      routes.route.openshift.io/
+      configmaps/
+      pods/
+      horizontalpodautoscalers.autoscaling/
+      servicemonitors.monitoring.coreos.com/
+      podmonitors.monitoring.coreos.com/
+      prometheusrules.monitoring.coreos.com/
+      clusterserviceversions.operators.coreos.com/
+      subscriptions.operators.coreos.com/
+      packagemanifests.packages.operators.coreos.com/
+    pods-logs/
 ```
 
-1. **Coleta** — scripts usam `oc` e gravam manifests e logs em disco.
-2. **Sanitização** — scripts removem arquivos `kind: Secret` e mascaram PII/tokens/certificados nos logs.
-3. **Assessment** — agente lê a pasta sanitizada e gera o relatório.
-
-O `run_assessment.sh` orquestra somente a extração. Sanitização e assessment
-devem ser executados separadamente.
-
----
-
-
-
-## Pipeline — ordem de execução
-
-
-
-### Ordem obrigatória (quando feita passo a passo)
-
-
-| #   | Etapa           | Comando                                                     | Observação              |
-| --- | --------------- | ----------------------------------------------------------- | ----------------------- |
-| 1   | Coleta          | `oc_collect_all_namespaces.sh` ou `oc_collect_namespace.sh` | Extrai dados do cluster |
-| 2   | Remover Secrets | `oc_remove_secret_manifests.sh -d <pasta>`                  | **Script**, sem agente  |
-| 3   | Anonimizar logs | `python src/anonymization.py <pasta>`                       | **Script**, sem agente  |
-| 4   | Assessment      | `PYTHONPATH=src python -m agent --artifacts <pasta> ...`    | Local ou LLM            |
-| 5   | Worker nodes    | `oc_collect_worknodes.sh -o <pasta>`                        | Extrai YAMLs dos nodes  |
-
-
-
-
-### Extração orquestrada
-
-O `run_assessment.sh` executa as coletas em sequência:
-
-```bash
-./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./pasta-saida
-```
-
-Fluxo interno:
-
-1. Coleta (`oc_collect_all_namespaces.sh`)
-2. Coleta dos worker nodes (`oc_collect_worknodes.sh`)
-
-Depois da extração, execute manualmente a remoção de Secrets, a anonimização
-dos logs e o assessment conforme as seções seguintes.
-
----
-
-
-
-## Scripts
-
-
-
-### Coleta
-
-
-| Script                                                                         | Função                                                                                       |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `[scripts/oc_collect_namespace.sh](scripts/oc_collect_namespace.sh)`           | Coleta artefatos de **um** namespace (deployments, services, routes, configmaps, logs, etc.) |
-| `[scripts/oc_collect_all_namespaces.sh](scripts/oc_collect_all_namespaces.sh)` | Orquestra a coleta para **vários** namespaces                                                |
-| `[scripts/oc_collect_worknodes.sh](scripts/oc_collect_worknodes.sh)`           | Coleta um manifesto YAML por worker node em `worknodes/`                                     |
-
-
-Exemplos:
-
-```bash
-# Um namespace
-./scripts/oc_collect_namespace.sh -n meu-namespace -o ./pasta-saida
-
-# Vários namespaces
-./scripts/oc_collect_all_namespaces.sh \
-  --namespaces "app-a app-b" \
-  -o ./pasta-saida \
-  --tail-lines 300
-
-# Somente os worker nodes
-./scripts/oc_collect_worknodes.sh -o ./pasta-saida
-```
-
-Requisitos: `oc` no PATH e sessão autenticada.
-
-### Sanitização (sem agente de IA)
-
-
-| Script                                                                           | Função                                                                                 |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `[scripts/oc_remove_secret_manifests.sh](scripts/oc_remove_secret_manifests.sh)` | Apaga manifests YAML com `kind: Secret`                                                |
-| `[src/anonymization.py](src/anonymization.py)`                                   | Anonimiza dados sensíveis em arquivos de log (CPF, e-mail, tokens, certificados, etc.) |
-
-
-```bash
-./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-# Preview sem apagar:
-./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida --dry-run
-
-python src/anonymization.py ./pasta-saida
-```
-
-
-
-### Orquestração e assessment
-
-
-| Script / comando                                         | Função                                                   |
-| -------------------------------------------------------- | -------------------------------------------------------- |
-| `[scripts/run_assessment.sh](scripts/run_assessment.sh)` | Orquestra somente a extração dos namespaces e worker nodes |
-| `PYTHONPATH=src python -m agent`                         | Gera o relatório a partir de uma pasta de artefatos      |
-
-
-
-
-### Utilitários de conversão (opcional)
-
-
-| Script                              | Função                                                               |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| `scripts/convert.sh` / `md_to_*.py` | Conversão do relatório Markdown para outros formatos (se necessário) |
-| `src/scripts/apply_pdf_template.py` | Gera PDF com o template Red Hat Consulting e suporte a Mermaid       |
-
-O conversor temático é independente e não faz parte do pipeline. Ele requer
-Pandoc, Mermaid CLI e Asciidoctor PDF:
-
-```bash
-gem install --user-install asciidoctor-pdf rouge
-npm install -g @mermaid-js/mermaid-cli
-
-python src/scripts/apply_pdf_template.py \
-  /home/parraes/Downloads/assessment-report.md \
-  /home/parraes/Downloads/assessment-report-formatado.pdf \
-  --customer Prodesp \
-  --description "Assessment de aplicações OpenShift" \
-  --version 1.0 \
-  --status final \
-  --confidentiality Confidencial \
-  --company-logo /caminho/para/logomarca.png \
-  --author "Nome do autor" \
-  --project-manager "Nome do gerente" \
-  --document-date "Janeiro de 2026"
-```
-
-Por padrão, o script usa a pasta `template/`. Outra pasta compatível pode ser
-informada com `--template-dir`. A opção `--company-logo` é opcional, aceita PNG
-e centraliza a imagem em aproximadamente 65% da largura da capa, preservando a
-proporção e limitando a altura para não provocar quebra de página.
-O valor de `--description` é usado como título da capa. Autor, gerente do
-projeto e data são exibidos no canto inferior esquerdo; `--document-date` deve
-seguir o formato `Mês de AAAA`, por exemplo, `Janeiro de 2026`.
-O conteúdo de `template/prefacio.md` é incluído depois da capa e antes do
-sumário. Todas as ocorrências de `<customer>` são substituídas pelo valor de
-`--customer`.
-
-
----
-
-
-
-## Anonimização e remoção de secrets
-
-
-
-### Princípio
-
-> **Extração, remoção de Secrets e anonimização de logs são responsabilidade exclusiva dos scripts.**  
-> O agente de assessment (local ou LLM) **não** participa dessas etapas e **não** deve receber artefatos ainda com secrets ou PII em claro.
-
-
-
-### O que cada script faz
-
-1. `oc_remove_secret_manifests.sh`
-  - Percorre a árvore de artefatos
-  - Identifica YAML com `kind: Secret`
-  - Remove esses arquivos do disco
-2. `src/anonymization.py`
-  - Percorre logs (e demais arquivos na pasta informada)
-  - Detecta padrões sensíveis (documentos, contatos, tokens, certificados, credenciais, etc.)
-  - Substitui/mascara os valores encontrados
-
-
-
-### Por que isso importa
-
-- Reduz risco de vazamento ao compartilhar a pasta de artefatos ou o relatório
-- Permite que o LLM/agente trabalhe só sobre dados já tratados
-- Mantém auditoria clara: sanitização determinística por script, análise depois
-
----
-
-
-
-## Executar sem LLM
-
-Usa heurísticas locais (sem `CURSOR_API_KEY` / sem API externa).
-
-### Opção A — só assessment (artefatos já prontos)
-
-```bash
-source .venv/bin/activate
-
-PYTHONPATH=src python -m agent \
-  --artifacts ./pasta-saida \
-  --mode local \
-  --report ./assessment-report.md
-```
-
-
-
-### Opção B — extração e assessment sem LLM
-
-```bash
-source .venv/bin/activate
-
-./scripts/run_assessment.sh \
-  --namespaces "app-a app-b" \
-  -o ./pasta-saida
-./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python src/anonymization.py ./pasta-saida
-PYTHONPATH=src python -m agent --artifacts ./pasta-saida --mode local \
-  --report ./pasta-saida/assessment-report.md
-```
-
----
-
-
-
-## Executar com LLM
-
-O `--mode llm` usa a **assinatura Cursor** via Cursor SDK (`CURSOR_API_KEY` no `.env`).
-
-### Configuração
-
-```bash
-cp .env.example .env
-# Preencha:
-# CURSOR_API_KEY=crsr_...
-# CURSOR_MODEL=composer-2.5   # opcional
-```
-
-Obter a key: [https://cursor.com/dashboard/api](https://cursor.com/dashboard/api)
-
-### Assessment com LLM (artefatos já coletados e sanitizados)
-
-```bash
-source .venv/bin/activate
-
-PYTHONPATH=src python -m agent \
-  --artifacts ./pasta-saida \
-  --mode llm \
-  --report ./assessment-report.md
-```
-
-
-
-### Extração e assessment com LLM
-
-```bash
-./scripts/run_assessment.sh \
-  --namespaces "app-a app-b" \
-  -o ./pasta-saida
-./scripts/oc_remove_secret_manifests.sh -d ./pasta-saida
-python src/anonymization.py ./pasta-saida
-PYTHONPATH=src python -m agent --artifacts ./pasta-saida --mode llm \
-  --report ./pasta-saida/assessment-report.md
-```
-
-
-
-### Alternativa OpenAI-compatible
-
-Se não usar Cursor SDK, configure no `.env`:
-
-```bash
-LLM_API_KEY=...
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
-```
-
-(Sem `CURSOR_API_KEY`, o `--mode llm` tenta essa API.)
-
-> A key do Cursor (`CURSOR_API_KEY`) **não** é uma chave OpenAI. Não use-a como `LLM_API_KEY`.
-
----
-
-
-
-## Conteúdo do relatório
-
-O assessment gera **um único** arquivo Markdown em **pt-BR**, em geral `assessment-report.md`, com:
-
-1. Sumário executivo e inventário
-2. Achados de configuração
-3. Arquitetura reversa (Deployments, Services, Routes, ConfigMaps) + diagrama
-4. CPU/memória por aplicação e sumário do namespace
-5. Sugestões **conservadoras** de resources e **HPA**, com exemplos YAML
-6. Observabilidade (logs, métricas, monitoramento) e oportunidades de melhoria
-7. Análise de ConfigMaps (indícios de dados sensíveis)
-8. Plano de ação separado:
-   - Infraestrutura do cluster / plataforma
-   - Melhorias da aplicação
-9. Referências utilizadas (Kubernetes, OpenShift, HPA, QoS)
-
----
-
-
-
-## Estrutura do repositório
+2. Legacy app-centric layout:
 
 ```text
-ai-ocp-app-assessment/
-├── AGENTS.md                 # Instruções para o Cursor Agent no IDE
-├── .cursor/rules/            # Rules do projeto
-├── .env.example              # Modelo de variáveis (sem secrets)
-├── README.md                 # Esta documentação
-├── requirements.txt          # Dependências Python do agente
-├── src/
-│   ├── anonymization.py      # Anonimização de logs (script, sem IA)
-│   ├── agent/                # Pacote Python (local + LLM Cursor/OpenAI)
-│   │   ├── __main__.py       # CLI: PYTHONPATH=src python -m agent
-│   │   ├── local_analyze.py  # Assessment sem LLM
-│   │   ├── cursor_assess.py  # Assessment com Cursor SDK
-│   │   └── analysis/         # Módulos de análise (topo, recursos, logs, etc.)
-│   └── scripts/              # Utilitários Python de conversão/template
-└── scripts/
-    ├── oc_collect_namespace.sh
-    ├── oc_collect_all_namespaces.sh
-    ├── oc_collect_worknodes.sh
-    ├── oc_remove_secret_manifests.sh
-    └── run_assessment.sh     # Orquestra a extração dos dados
+<artifacts>/
+  <namespace>/
+    apps/
+      <app>/
+        deployments/
+        services/
+        routes/
+        configmaps/
+        hpa/
+        pod-logs/
 ```
 
----
+## Configuration
 
+The CLI loads variables from `.env` in the project root.
 
+Example:
 
-## Resumo rápido
+```dotenv
+CURSOR_API_KEY=
+CURSOR_MODEL=composer-2.5
 
+# Alternative OpenAI-compatible provider
+# LLM_API_KEY=
+# LLM_BASE_URL=https://api.openai.com/v1
+# LLM_MODEL=gpt-4o-mini
+```
 
-| Objetivo                                    | Comando                                                           |
-| ------------------------------------------- | ----------------------------------------------------------------- |
-| Extrair namespaces e worker nodes           | `./scripts/run_assessment.sh --namespaces "ns1 ns2" -o ./out`     |
-| Só relatório **sem** LLM                    | `PYTHONPATH=src python -m agent -a ./out --mode local -r ./assessment-report.md` |
-| Só relatório **com** LLM (Cursor)           | `PYTHONPATH=src python -m agent -a ./out --mode llm -r ./assessment-report.md`   |
-| Remover Secrets                             | `./scripts/oc_remove_secret_manifests.sh -d ./out`                |
-| Anonimizar logs                             | `python src/anonymization.py ./out`                               |
+LLM mode now validates the `.env` file before running:
 
+- if `.env` does not exist, execution stops with a friendly error
+- if both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, execution stops with a friendly error
 
-**Lembrete:** extraia com os scripts de coleta; anonimize e remova secrets **antes** do agente; o agente só analisa a pasta já sanitizada.
+## Execution flow
+
+### 1. Prepare or collect artifacts
+
+Use `kubeoptix-harvester` first to export cluster data, remove `Secret` manifests, and anonymize sensitive content.
+
+### 2. Install dependencies
+
+```bash
+./run.sh --help
+```
+
+When you run the wrapper script for the first time, it will:
+
+1. Resolve the project root.
+2. Create `.venv/` if it does not exist.
+3. Activate the virtual environment.
+4. Upgrade `pip`.
+5. Install dependencies from `requirements.txt`.
+6. Start `python -m agent` with the same CLI arguments.
+
+### 3. Run the analyzer
+
+Local mode:
+
+```bash
+./run.sh --artifacts ./artifacts
+```
+
+LLM mode:
+
+```bash
+./run.sh --artifacts ./artifacts --mode llm
+```
+
+Custom report path:
+
+```bash
+./run.sh --artifacts ./artifacts --report ./out/assessment-report.md
+```
+
+### 4. Choose the analysis mode
+
+`local`
+
+- deterministic analysis without external LLM calls
+- scans manifests, routes, services, ConfigMaps, logs, operators, HPAs, and worker-node capacity
+- writes one Markdown report directly from local heuristics
+
+`llm`
+
+- validates that `.env` exists and contains credentials
+- if `CURSOR_API_KEY` is set, uses Cursor SDK
+- otherwise, if `LLM_API_KEY` is set, uses an OpenAI-compatible API and a tool-driven ReAct loop
+- writes a single Markdown report to the artifact directory or the path passed with `--report`
+
+### 5. Review the output
+
+By default, the generated file is:
+
+```text
+<artifacts>/assessment-report.md
+```
+
+The report covers inventory, topology, resources, observability, ConfigMap security checks, findings, action plan, and references.
+
+## Internal analyzer flow
+
+```mermaid
+flowchart TD
+    A[Prepared artifacts directory] --> B[run.sh]
+    B --> C[Create or reuse .venv]
+    C --> D[Install dependencies]
+    D --> E[python -m agent]
+    E --> F{Mode}
+
+    F -->|local| G[Discover namespaces and worknodes]
+    G --> H[Parse YAML manifests and logs]
+    H --> I[Run local analysis modules]
+    I --> J[Write assessment-report.md]
+
+    F -->|llm| K[Validate .env and credentials]
+    K --> L{Provider}
+    L -->|Cursor| M[Cursor SDK prompt over artifact directory]
+    L -->|OpenAI-compatible| N[Inventory artifacts and expose local tools]
+    N --> O[Tool-driven ReAct loop]
+    M --> P[Write Markdown report]
+    O --> P
+```
+
+## What local mode analyzes
+
+- namespace discovery
+- application inventory
+- topology inferred from Deployments, Services, Routes, and ConfigMaps
+- CPU and memory requests and limits
+- worker-node allocatable and capacity totals
+- HPA and observability-related resources
+- log error patterns such as crashes, OOM, timeouts, and connection failures
+- risky configuration patterns in manifests and ConfigMaps
+- operator inventory from CSVs, Subscriptions, and PackageManifests
+
+## Main commands
+
+Show CLI help:
+
+```bash
+python -m agent --help
+```
+
+Run local analysis directly:
+
+```bash
+python -m agent --artifacts ./artifacts --mode local
+```
+
+Run LLM analysis directly:
+
+```bash
+python -m agent --artifacts ./artifacts --mode llm
+```
+
+## Notes
+
+- The analyzer is offline with respect to cluster access. It only reads local artifacts.
+- The quality of the report depends on the completeness of the collected artifacts.
+- LLM mode does not replace artifact sanitization. Sensitive-data removal should happen upstream in the harvester pipeline.
