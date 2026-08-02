@@ -1,4 +1,4 @@
-"""Tools de filesystem para explorar artefatos."""
+"""Filesystem tools for exploring artifacts."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from agent.tools.base import FunctionTool, object_schema
 
 
 def _safe_resolve(artifacts_dir: Path, relative_path: str) -> Path:
-    """Resolve path relativo e garante que permanece dentro de artifacts_dir."""
+    """Resolve a relative path and ensure it stays within artifacts_dir."""
     root = artifacts_dir.resolve()
     target = (root / relative_path).resolve()
     try:
         target.relative_to(root)
     except ValueError as exc:
-        raise ValueError(f"Path fora do diretório de artefatos: {relative_path}") from exc
+        raise ValueError(f"Path outside artifacts directory: {relative_path}") from exc
     return target
 
 
@@ -25,17 +25,17 @@ def build_filesystem_tools(
     def list_artifacts(path: str = ".") -> str:
         target = _safe_resolve(artifacts_dir, path)
         if not target.exists():
-            return f"Path não encontrado: {path}"
+            return f"Path not found: {path}"
         if target.is_file():
             return f"Arquivo: {path} ({target.stat().st_size} bytes)"
 
         lines: list[str] = []
-        # Inventário estruturado: namespaces → apps
+        # Structured inventory: namespaces -> apps.
         namespaces = sorted(
             p for p in target.iterdir() if p.is_dir() and not p.name.startswith(".")
         )
         if not namespaces:
-            # fallback: listagem simples
+            # Fallback: simple listing.
             for child in sorted(target.iterdir()):
                 kind = "dir" if child.is_dir() else "file"
                 lines.append(f"{kind}\t{child.relative_to(artifacts_dir)}")
@@ -67,7 +67,7 @@ def build_filesystem_tools(
         limit = max_chars if max_chars is not None else max_file_chars
         target = _safe_resolve(artifacts_dir, path)
         if not target.is_file():
-            return f"Arquivo não encontrado: {path}"
+            return f"File not found: {path}"
         text = target.read_text(encoding="utf-8", errors="replace")
         if len(text) > limit:
             return (
@@ -79,15 +79,15 @@ def build_filesystem_tools(
     def find_files(pattern: str = "**/*", path: str = ".") -> str:
         base = _safe_resolve(artifacts_dir, path)
         if not base.exists():
-            return f"Path não encontrado: {path}"
+            return f"Path not found: {path}"
         matches = sorted(
             p.relative_to(artifacts_dir).as_posix()
             for p in base.glob(pattern)
             if p.is_file()
         )
         if not matches:
-            return f"Nenhum arquivo para padrão: {pattern}"
-        # Limita listagem para não estourar contexto
+            return f"No files found for pattern: {pattern}"
+        # Limit listing size to avoid overflowing the context.
         max_items = 200
         shown = matches[:max_items]
         extra = len(matches) - len(shown)

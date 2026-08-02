@@ -1,4 +1,4 @@
-"""Configuração do agente via variáveis de ambiente."""
+"""Agent configuration via environment variables."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values, load_dotenv
 
-# Carrega .env na raiz do projeto, se existir.
+# Load .env from the project root, if it exists.
 _ROOT = Path(__file__).resolve().parent.parent
 _ENV_FILE = _ROOT / ".env"
 load_dotenv(_ENV_FILE)
@@ -34,8 +34,8 @@ class EmbeddedSettings:
 def validate_llm_env() -> None:
     if not _ENV_FILE.is_file():
         raise SystemExit(
-            "Arquivo .env nao encontrado na raiz do projeto. "
-            "Crie o arquivo a partir de .env.example e preencha as variaveis do modo llm."
+            "No .env file found at the project root. "
+            "Create it from .env.example and fill in the llm mode variables."
         )
 
     values = dotenv_values(_ENV_FILE)
@@ -46,10 +46,10 @@ def validate_llm_env() -> None:
         return
 
     raise SystemExit(
-        "Modo llm requer credenciais no .env. Preencha uma destas opcoes:\n"
-        "- CURSOR_API_KEY para usar Cursor SDK\n"
-        "- LLM_API_KEY para usar uma API OpenAI-compatible\n"
-        "Veja .env.example para o formato esperado."
+        "llm mode requires credentials in .env. Fill one of these options:\n"
+        "- CURSOR_API_KEY to use Cursor SDK\n"
+        "- LLM_API_KEY to use an OpenAI-compatible API\n"
+        "See .env.example for the expected format."
     )
 
 
@@ -60,13 +60,13 @@ def get_settings() -> Settings:
         hint = ""
         if cursor_key:
             hint = (
-                "\n\nDetectei CURSOR_API_KEY no .env — ela NÃO funciona com --mode llm.\n"
-                "Use --mode local (recomendado) ou configure LLM_API_KEY de um "
-                "provedor OpenAI-compatible (OpenAI, Azure, vLLM, etc.)."
+                "\n\nDetected CURSOR_API_KEY in .env — it does NOT work with --mode llm.\n"
+                "Use --mode local (recommended) or configure LLM_API_KEY from an "
+                "OpenAI-compatible provider (OpenAI, Azure, vLLM, etc.)."
             )
         raise SystemExit(
-            "LLM_API_KEY não definida. Configure no ambiente ou em .env "
-            "(veja .env.example)." + hint
+            "LLM_API_KEY is not set. Configure it in the environment or in .env "
+            "(see .env.example)." + hint
         )
 
     return Settings(

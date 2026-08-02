@@ -1,4 +1,4 @@
-"""Utilitários YAML e unidades de recurso Kubernetes."""
+"""YAML helpers and Kubernetes resource-unit utilities."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def app_label(doc: dict[str, Any], fallback: str = "") -> str:
 
 
 def parse_cpu(value: Any) -> float | None:
-    """Retorna CPU em millicores."""
+    """Return CPU in millicores."""
     if value is None:
         return None
     s = str(value).strip()
@@ -55,7 +55,7 @@ def parse_cpu(value: Any) -> float | None:
 
 
 def parse_memory_mi(value: Any) -> float | None:
-    """Retorna memória em MiB."""
+    """Return memory in MiB."""
     if value is None:
         return None
     s = str(value).strip()
@@ -67,14 +67,14 @@ def parse_memory_mi(value: Any) -> float | None:
             "Mi": 1.0,
             "Gi": 1024.0,
             "Ti": 1024.0 * 1024,
-            "K": 1000 / (1024 * 1024) * 1000,  # rough
+            "K": 1000 / (1024 * 1024) * 1000,  # rough approximation
             "M": 1000 / 1024,
             "G": 1000 * 1000 / 1024,
         }
         for suffix, factor in units.items():
             if s.endswith(suffix):
                 return float(s[: -len(suffix)]) * factor
-        # bytes puros
+        # raw bytes
         return float(s) / (1024 * 1024)
     except ValueError:
         return None

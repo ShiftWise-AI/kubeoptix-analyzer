@@ -1,4 +1,4 @@
-"""Mapeamento de CPU/memória e sugestões conservadoras (resources + HPA)."""
+"""CPU/memory mapping and conservative recommendations (resources + HPA)."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ from agent.analysis.yaml_util import (
     parse_memory_mi,
 )
 
-# Baselines conservadoras quando faltam requests/limits (valores por contêiner).
+# Conservative baselines when requests/limits are missing (per-container values).
 DEFAULT_CPU_REQ_M = 100.0
 DEFAULT_CPU_LIM_M = 250.0
 DEFAULT_MEM_REQ_MI = 128.0
 DEFAULT_MEM_LIM_MI = 256.0
-# Limite tipicamente 2x o request (Burstable conservador).
+# Limit is typically 2x the request (conservative Burstable profile).
 LIMIT_TO_REQUEST_RATIO = 2.0
-# Se limit/request > isto, sugerir apertar o limit.
+# If limit/request is above this ratio, recommend tightening the limit.
 MAX_BURST_RATIO = 3.0
 
 
@@ -40,7 +40,7 @@ class ContainerResources:
     mem_req_mi: float | None
     mem_lim_mi: float | None
     qos_class: str = "BestEffort"
-    # Sugestões por contêiner (já arredondadas)
+    # Per-container suggestions (already rounded).
     sug_cpu_req_m: float = 0.0
     sug_cpu_lim_m: float = 0.0
     sug_mem_req_mi: float = 0.0
@@ -68,7 +68,7 @@ def qos_class_for_container(
     mem_req: float | None,
     mem_lim: float | None,
 ) -> str:
-    """QoS aproximado por contêiner (mesma regra do kubelet em pod de 1 contêiner)."""
+    """Approximate per-container QoS using the same rule as a single-container pod."""
     has_any_req = cpu_req is not None or mem_req is not None
     has_any_lim = cpu_lim is not None or mem_lim is not None
     if not has_any_req and not has_any_lim:
@@ -117,7 +117,7 @@ class AppResourceSummary:
     mem_lim_mi: float = 0.0
     missing_requests: int = 0
     missing_limits: int = 0
-    # Por pod (soma dos contêineres do workload principal)
+    # Per pod (sum of containers in the main workload)
     sug_cpu_req_m: float = 0.0
     sug_cpu_lim_m: float = 0.0
     sug_mem_req_mi: float = 0.0
@@ -168,7 +168,7 @@ class ResourceAnalysis:
 
 
 def _round_cpu_m(value: float) -> float:
-    """Arredonda millicores para valores práticos."""
+    """Round millicores to practical values."""
     if value < 50:
         return 50.0
     if value < 200:
@@ -195,7 +195,7 @@ def _suggest_pair(
     default_lim: float,
     kind: str,
 ) -> tuple[float, float, list[str]]:
-    """Sugestão conservadora de (request, limit) para um recurso."""
+    """Conservative suggestion for a resource (request, limit) pair."""
     notes: list[str] = []
     if req is None and lim is None:
         notes.append(f"{kind}: ausentes — baseline conservadora {default_req}/{default_lim}")
@@ -262,7 +262,7 @@ def _suggest_pair(
         )
         return sug_req, sug_lim, notes
 
-    # Já razoável: manter, só arredondar
+    # Already reasonable: keep as-is, only round.
     if kind == "CPU":
         return _round_cpu_m(req), _round_cpu_m(lim), notes
     return _round_mem_mi(req), _round_mem_mi(lim), notes
@@ -307,7 +307,7 @@ def analyze_resources(
     result = ResourceAnalysis(worknodes=worknodes)
     result.hpas = _parse_hpas(ns)
 
-    # Primeiro passo: itens por contêiner + sugestões
+    # First pass: per-container items + recommendations.
     for path in ns.deployments:
         for doc in load_yaml_docs(path):
             kind = doc.get("kind") or "Deployment"
@@ -403,17 +403,17 @@ def analyze_resources(
         result.ns_cpu_lim_m += summary.cpu_lim_m
         result.ns_mem_req_mi += summary.mem_req_mi
         result.ns_mem_lim_mi += summary.mem_lim_mi
-        # Sugestão de namespace: por pod × réplicas sugeridas mínimas (conservador)
+        # Namespace-level suggestion: per pod × minimum recommended replicas (conservative).
         min_r = max(2, summary.replicas) if summary.replicas < 2 else summary.replicas
         result.ns_sug_cpu_req_m += summary.sug_cpu_req_m * min_r
         result.ns_sug_cpu_lim_m += summary.sug_cpu_lim_m * min_r
         result.ns_sug_mem_req_mi += summary.sug_mem_req_mi * min_r
         result.ns_sug_mem_lim_mi += summary.sug_mem_lim_mi * min_r
 
-        # HPA conservador
+        # Conservative HPA suggestion.
         min_replicas = max(2, summary.replicas)
         max_replicas = max(min_replicas + 2, min_replicas * 2)
-        # Cap conservador: não sugerir mais que 6 sem evidência de carga
+        # Conservative cap: do not suggest more than 6 without load evidence.
         max_replicas = min(max_replicas, 6)
         rationale_parts = [
             f"minReplicas={min_replicas} (HA: evitar réplica única)",
@@ -641,7 +641,7 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
     eco_mem_lim = lim_mem - sug_lim_mem
 
     def _eco_cell(delta: float, base: float, kind: str) -> str:
-        """delta > 0 = economia; delta < 0 = aumento (ex.: HA)."""
+        """delta > 0 means savings; delta < 0 means an increase (for example: HA)."""
         if kind == "cpu":
             val = format_cpu_m(abs(delta))
         else:
@@ -773,7 +773,7 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
     if not analysis.items:
         lines.append("| — | — | — | — | — | — | — | — |")
 
-    # Exemplo YAML de resources (primeiro item com notas, senão o primeiro)
+    # Example resources YAML (first item with notes, otherwise the first item).
     example_item = next(
         (i for i in analysis.items if i.suggestion_notes),
         analysis.items[0] if analysis.items else None,
@@ -810,7 +810,7 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
         lines.append("| — | — | — | — | — | — | — |")
 
     if analysis.hpa_suggestions:
-        # Escolhe um exemplo representativo (sem HPA se possível)
+        # Choose a representative example (prefer one without an HPA).
         sug_ex = next(
             (s for s in analysis.hpa_suggestions if not s.existing_hpa),
             analysis.hpa_suggestions[0],
@@ -838,7 +838,7 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
             ]
         )
 
-    # Gráficos pizza
+    # Pie charts.
     mem_counter: dict[str, int] = {
         app: int(round(s.mem_lim_mi))
         for app, s in analysis.by_app.items()

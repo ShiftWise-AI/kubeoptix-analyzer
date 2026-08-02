@@ -1,4 +1,4 @@
-"""Assessment híbrido local com heurísticas, scoring e síntese por LLM local."""
+"""Hybrid local assessment with heuristics, scoring, and local LLM synthesis."""
 
 from __future__ import annotations
 
@@ -461,16 +461,16 @@ def _build_evidence_prompt(results: list[NamespaceEmbeddedResult], artifacts_dir
     for result in results:
         top_risks = ", ".join(
             f"{risk.app}/{risk.workload}={risk.score}" for risk in result.workload_risks[:5]
-        ) or "nenhum"
+        ) or "none"
         top_findings = "; ".join(
             f"{finding.title} [score={finding.score}]" for finding in result.prioritized_findings[:5]
-        ) or "nenhum"
+        ) or "none"
         top_clusters = "; ".join(
             f"{cluster.app}:{cluster.category} x{cluster.count}" for cluster in result.log_clusters[:5]
-        ) or "nenhum"
+        ) or "none"
         outliers = "; ".join(
             f"{outlier.app}:{outlier.metric}:{outlier.kind}:{outlier.value:.1f}" for outlier in result.outliers[:5]
-        ) or "nenhum"
+        ) or "none"
         lines.extend(
             [
                 f"Namespace: {result.ns.name}",
@@ -515,17 +515,17 @@ def _generate_local_summary(settings: EmbeddedSettings, prompt: str) -> str:
         )
     except Exception as exc:  # noqa: BLE001
         raise SystemExit(
-            "Nao foi possivel usar a IA embarcada local. "
-            f"Verifique o endpoint OpenAI-compatible em {settings.base_url}, "
-            f"o modelo '{settings.model}' e se o runtime local esta ativo (ex.: Ollama).\n"
-            f"Detalhe: {exc}"
+            "Could not use the local embedded AI. "
+            f"Check the OpenAI-compatible endpoint at {settings.base_url}, "
+            f"the model '{settings.model}', and whether the local runtime is running (for example: Ollama).\n"
+            f"Detail: {exc}"
         ) from exc
 
     content = response.choices[0].message.content or ""
     text = str(content).strip()
     if not text:
         raise SystemExit(
-            "A IA embarcada local respondeu vazio. Verifique o modelo configurado "
+            "The local embedded AI returned an empty response. Check the model configured "
             f"em EMBEDDED_MODEL ({settings.model})."
         )
     return text
@@ -538,7 +538,7 @@ def run_embedded_assessment(
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
-        raise SystemExit(f"Diretório de artefatos inválido: {artifacts_dir}")
+        raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
     out = resolve_report_path(artifacts_dir, report_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -620,7 +620,7 @@ def run_embedded_assessment(
     content = "\n".join(parts)
     content = re.sub(r"\n{3,}", "\n\n", content)
     out.write_text(content, encoding="utf-8")
-    print(f"[agent] Modo embedded via endpoint local: {settings.base_url}")
-    print(f"[agent] Modelo embedded: {settings.model}")
-    print(f"[agent] Relatório único gravado em: {out}")
+    print(f"[agent] Embedded mode via local endpoint: {settings.base_url}")
+    print(f"[agent] Embedded model: {settings.model}")
+    print(f"[agent] Single report written to: {out}")
     return out

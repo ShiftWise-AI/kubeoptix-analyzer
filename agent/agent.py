@@ -1,4 +1,4 @@
-"""Loop ReAct do agente de assessment."""
+"""ReAct loop for the assessment agent."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _message_content(message: Any) -> str:
 def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
-        raise SystemExit(f"Diretório de artefatos inválido: {artifacts_dir}")
+        raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
     report = ReportBuilder(artifacts_dir=artifacts_dir)
     tools = build_all_tools(artifacts_dir, report, settings.max_file_chars)
@@ -88,16 +88,16 @@ def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
             try:
                 args = json.loads(raw_args) if raw_args else {}
                 if not isinstance(args, dict):
-                    raise ValueError("Argumentos da tool devem ser um objeto JSON")
+                    raise ValueError("Tool arguments must be a JSON object")
                 tool = registry.get(name)
                 if tool is None:
-                    result = f"Tool desconhecida: {name}"
+                    result = f"Unknown tool: {name}"
                 else:
                     result = tool.run(**args)
             except Exception as exc:  # noqa: BLE001
-                result = f"Erro ao executar {name}: {exc}"
+                result = f"Error running {name}: {exc}"
 
-            # Evita estourar contexto com resultados enormes
+            # Prevent huge tool results from overflowing the context window.
             if len(result) > settings.max_file_chars:
                 result = (
                     result[: settings.max_file_chars]
@@ -112,7 +112,7 @@ def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
                 }
             )
     else:
-        print("[agent] Limite de iterações atingido.")
+        print("[agent] Iteration limit reached.")
         if not report.sections:
             report.add_section(
                 "Resumo incompleto",
@@ -120,5 +120,5 @@ def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
             )
 
     out = report.write()
-    print(f"[agent] Relatório gravado em: {out}")
+    print(f"[agent] Report written to: {out}")
     return out

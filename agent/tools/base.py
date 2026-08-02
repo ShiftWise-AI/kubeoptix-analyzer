@@ -1,4 +1,4 @@
-"""Protocolo e helpers para tools do agente."""
+"""Protocol and helpers for agent tools."""
 
 from __future__ import annotations
 

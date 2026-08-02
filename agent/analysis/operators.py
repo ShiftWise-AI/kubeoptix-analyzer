@@ -1,4 +1,4 @@
-"""Inventário de ClusterServiceVersions (operadores OLM) em tabela Markdown."""
+"""Inventory of ClusterServiceVersions (OLM operators) in Markdown table form."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.yaml_util import load_yaml_docs, meta_name
 
-# Estados OLM Subscription.status.state (console: "Upgrade available" / "Up to date")
+# OLM Subscription.status.state values (console: "Upgrade available" / "Up to date")
 _STATE_AT_LATEST = "AtLatestKnown"
 _STATE_UPGRADE_AVAILABLE = "UpgradeAvailable"
 _STATE_UNKNOWN = "—"
@@ -57,7 +57,7 @@ def _package_name(doc: dict[str, Any], csv_name: str) -> str:
 
 
 def _extract_status_state(doc: dict[str, Any]) -> str:
-    """Extrai `status.state` (propriedade OLM). Busca direta e, se ausente, aninhada."""
+    """Extract `status.state` (OLM property), checking direct and nested forms."""
     status = doc.get("status")
     if not isinstance(status, dict):
         return ""
@@ -70,7 +70,7 @@ def _extract_status_state(doc: dict[str, Any]) -> str:
         if text:
             return text
 
-    # Busca aninhada por propriedade `state:` dentro de status
+    # Nested search for a `state:` property inside status.
     found: list[str] = []
 
     def walk(obj: Any) -> None:
@@ -91,7 +91,7 @@ def _extract_status_state(doc: dict[str, Any]) -> str:
 
 
 def _subscription_states(ns: NamespaceArtifacts) -> dict[str, str]:
-    """Mapa installedCSV/currentCSV/package → status.state da Subscription."""
+    """Map installedCSV/currentCSV/package to Subscription.status.state."""
     by_csv: dict[str, str] = {}
     for path in ns.subscriptions:
         for doc in load_yaml_docs(path):
@@ -113,7 +113,7 @@ def _subscription_states(ns: NamespaceArtifacts) -> dict[str, str]:
 
 
 def _packagemanifest_current_csv(ns: NamespaceArtifacts) -> dict[str, str]:
-    """Mapa packageName → currentCSV do canal default (ou primeiro canal)."""
+    """Map packageName to currentCSV from the default channel (or first channel)."""
     by_pkg: dict[str, str] = {}
     for path in ns.packagemanifests:
         for doc in load_yaml_docs(path):
@@ -147,19 +147,19 @@ def _resolve_upgrade_state(
     sub_states: dict[str, str],
     pm_current: dict[str, str],
 ) -> str:
-    # 1) status.state no próprio YAML (CSV ou recurso com state)
+    # 1) status.state on the YAML itself (CSV or another resource with state)
     own_state = _extract_status_state(csv_doc)
     if own_state:
         return own_state
 
-    # 2) status.state da Subscription OLM correspondente
+    # 2) status.state from the matching OLM Subscription
     if csv_name in sub_states:
         return sub_states[csv_name]
     pkg_key = f"pkg:{package}"
     if pkg_key in sub_states:
         return sub_states[pkg_key]
 
-    # 3) Inferência via PackageManifest (canal default)
+    # 3) Inference via PackageManifest (default channel)
     latest = pm_current.get(package)
     if not latest:
         return _STATE_UNKNOWN
@@ -210,7 +210,7 @@ def _rel_path(ns_root: Path, path: Path) -> str:
 
 
 def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
-    """Seção 2.6 — operadores presentes (sempre em tabela Markdown)."""
+    """Section 2.6 — operators present in the namespace (always as a Markdown table)."""
     lines = [
         f"### 2.6 Operadores presentes no namespace (ClusterServiceVersions) — `{ns_name}`",
         "",

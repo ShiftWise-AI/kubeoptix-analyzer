@@ -1,4 +1,4 @@
-"""Descoberta do layout de artefatos (collector antigo ou resources/)."""
+"""Artifact layout discovery (legacy collector or resources/ layout)."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
             ns.log_files.extend(sorted(logs_dir.rglob("*.log")))
             ns.log_files.extend(sorted(logs_dir.rglob("*.txt")))
 
-    # Layout antigo: apps/<app>/<tipo>/
+    # Legacy layout: apps/<app>/<type>/
     apps = root / "apps"
     if apps.is_dir():
         for app_dir in sorted(p for p in apps.iterdir() if p.is_dir()):
@@ -118,7 +118,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
                 files = [f for f in files if f.is_file()]
                 getattr(ns, attr).extend(files)
 
-    # Dedup paths
+    # Deduplicate paths.
     for attr in (
         "deployments",
         "services",
@@ -148,7 +148,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
 
 def discover_namespaces(artifacts_dir: Path) -> list[NamespaceArtifacts]:
     artifacts_dir = artifacts_dir.resolve()
-    # Caso 1: o próprio diretório é um namespace (tem resources/ ou pods-logs/)
+    # Case 1: the directory itself is a namespace (has resources/ or pods-logs/).
     if (artifacts_dir / "resources").is_dir() or (artifacts_dir / "pods-logs").is_dir():
         return [_discover_namespace_root(artifacts_dir, artifacts_dir.name)]
 
@@ -161,7 +161,7 @@ def discover_namespaces(artifacts_dir: Path) -> list[NamespaceArtifacts]:
         ).is_dir():
             namespaces.append(_discover_namespace_root(child, child.name))
     if not namespaces:
-        # fallback: tratar raiz como namespace genérico
+        # Fallback: treat the root as a generic namespace.
         namespaces.append(_discover_namespace_root(artifacts_dir, artifacts_dir.name))
     return namespaces
 

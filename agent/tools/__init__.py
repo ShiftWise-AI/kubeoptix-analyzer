@@ -1,4 +1,4 @@
-"""Registry de tools do agente."""
+"""Registry of agent tools."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from agent.tools.manifests import build_manifest_tools
 def build_report_tools(report: ReportBuilder) -> list[FunctionTool]:
     def write_report_section(title: str, body: str) -> str:
         report.add_section(title, body)
-        return f"Seção '{title}' registrada ({len(body)} chars)."
+        return f"Section '{title}' registered ({len(body)} chars)."
 
     return [
         FunctionTool(

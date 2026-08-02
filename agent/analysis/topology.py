@@ -1,4 +1,4 @@
-"""Arquitetura reversa a partir de Deployments, Services, Routes e ConfigMaps."""
+"""Reverse architecture inferred from Deployments, Services, Routes, and ConfigMaps."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class TopologyResult:
     routes: list[dict[str, str]] = field(default_factory=list)
     services: list[dict[str, str]] = field(default_factory=list)
     http_deps: list[tuple[str, str]] = field(default_factory=list)  # app -> app
-    config_refs: list[tuple[str, str]] = field(default_factory=list)  # app -> cm/secret
+    config_refs: list[tuple[str, str]] = field(default_factory=list)  # app -> configmap/secret
     edges: list[Edge] = field(default_factory=list)
     mermaid: str = ""
     human_summary: list[str] = field(default_factory=list)
@@ -116,7 +116,7 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
     result.http_deps = sorted(set(result.http_deps))
     result.config_refs = sorted(set(result.config_refs))
 
-    # edges legados (lista textual)
+    # Legacy-style textual edges.
     for r in result.routes:
         if r.get("app"):
             result.edges.append(Edge(f"usuário via {r['host']}", r["app"], "entrada HTTP"))
@@ -162,7 +162,7 @@ def _human_summary(topo: TopologyResult) -> list[str]:
 
 
 def _render_mermaid_simple(topo: TopologyResult) -> str:
-    """Diagrama TB simples: Usuário → Apps e Apps → Apps."""
+    """Simple top-to-bottom diagram: user -> apps and apps -> apps."""
     lines = [
         "flowchart TB",
         '  usuario["Usuario / Internet"]',
@@ -180,12 +180,12 @@ def _render_mermaid_simple(topo: TopologyResult) -> str:
     for app in topo.apps:
         node(app)
 
-    # Entrada via Route (agrupa por app)
+    # Public entry via Route (grouped by app).
     routed_apps = {r["app"] for r in topo.routes if r.get("app")}
     for app in sorted(routed_apps):
         lines.append(f'  usuario -->|HTTP/HTTPS| {node(app)}')
 
-    # Dependências app→app
+    # App-to-app dependencies.
     for src, dst in topo.http_deps:
         lines.append(f'  {node(src)} -->|chama| {node(dst)}')
 

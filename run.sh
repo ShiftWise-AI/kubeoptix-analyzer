@@ -8,10 +8,10 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 usage() {
     cat <<'EOF'
-Uso:
+Usage:
   ./run.sh --artifacts <diretorio> [--report <arquivo-ou-diretorio>] [--mode local|llm|embedded]
 
-Exemplos:
+Examples:
   ./run.sh --artifacts ./artifacts
   ./run.sh --artifacts ./artifacts --mode llm
   ./run.sh --artifacts ./artifacts --mode embedded
@@ -24,23 +24,23 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-    echo "Erro: interpretador Python nao encontrado: $PYTHON_BIN" >&2
+  echo "Error: Python interpreter not found: $PYTHON_BIN" >&2
     exit 1
 fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
-    echo "[run.sh] Criando ambiente virtual em $VENV_DIR"
+  echo "[run.sh] Creating virtual environment at $VENV_DIR"
     "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 
-echo "[run.sh] Instalando dependencias"
+echo "[run.sh] Installing dependencies"
 python -m pip install --upgrade pip
 python -m pip install -r "$ROOT_DIR/requirements.txt"
 
 cd "$ROOT_DIR"
 
-echo "[run.sh] Executando agente"
+echo "[run.sh] Running agent"
 python -m agent "$@"

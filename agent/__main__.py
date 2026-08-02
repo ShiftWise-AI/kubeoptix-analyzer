@@ -1,4 +1,4 @@
-"""CLI: PYTHONPATH=src python -m agent --artifacts ./pasta [--mode local|llm|embedded]."""
+"""CLI: PYTHONPATH=src python -m agent --artifacts ./folder [--mode local|llm|embedded]."""
 
 from __future__ import annotations
 
@@ -17,20 +17,20 @@ load_dotenv(_ROOT / ".env")
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Assessment OpenShift: análise local, LLM remoto, ou IA embarcada local."
+        description="OpenShift assessment: local analysis, remote LLM, or local embedded AI."
     )
     parser.add_argument(
         "--artifacts",
         "-a",
         required=True,
-        help="Diretório com artefatos coletados",
+        help="Directory containing collected artifacts",
     )
     parser.add_argument(
         "--report",
         "-r",
         default=None,
         help=(
-            "Arquivo .md ou diretório de saída "
+            "Output .md file or output directory "
             "(default: <artifacts>/assessment-report.md)"
         ),
     )
@@ -39,9 +39,9 @@ def main() -> None:
         choices=("local", "llm", "embedded"),
         default="local",
         help=(
-            "local = heurísticas sem LLM; "
-            "llm = Cursor SDK (CURSOR_API_KEY) ou API OpenAI-compatible (LLM_API_KEY); "
-            "embedded = heurísticas + modelo local OpenAI-compatible (ex.: Ollama/Mistral)"
+            "local = heuristics without an LLM; "
+            "llm = Cursor SDK (CURSOR_API_KEY) or OpenAI-compatible API (LLM_API_KEY); "
+            "embedded = heuristics + local OpenAI-compatible model (for example: Ollama/Mistral)"
         ),
     )
     args = parser.parse_args()
@@ -51,14 +51,14 @@ def main() -> None:
 
     if args.mode == "local":
         out = run_local_assessment(artifacts, report)
-        print(f"[agent] Relatório gravado em: {out}")
+        print(f"[agent] Report written to: {out}")
         return
 
     if args.mode == "embedded":
         from agent.embedded_assess import run_embedded_assessment
 
         out = run_embedded_assessment(artifacts, report, get_embedded_settings())
-        print(f"[agent] Relatório gravado em: {out}")
+        print(f"[agent] Report written to: {out}")
         return
 
     validate_llm_env()
@@ -70,7 +70,7 @@ def main() -> None:
         from agent.cursor_assess import run_cursor_assessment
 
         out = run_cursor_assessment(artifacts, report)
-        print(f"[agent] Relatório gravado em: {out}")
+        print(f"[agent] Report written to: {out}")
         return
 
     if openai_key:
@@ -84,13 +84,13 @@ def main() -> None:
             if out.resolve() != dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
-                print(f"[agent] Relatório copiado para: {dest}")
-        print(f"[agent] Relatório gravado em: {out}")
+                print(f"[agent] Report copied to: {dest}")
+        print(f"[agent] Report written to: {out}")
         return
 
     raise SystemExit(
-        "Nao foi possivel iniciar o modo llm porque as credenciais do .env estao vazias.\n"
-        "Preencha CURSOR_API_KEY ou LLM_API_KEY e tente novamente."
+        "Could not start llm mode because the .env credentials are empty.\n"
+        "Set CURSOR_API_KEY or LLM_API_KEY and try again."
     )
 
 

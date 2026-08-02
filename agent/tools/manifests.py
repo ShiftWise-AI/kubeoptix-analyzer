@@ -1,4 +1,4 @@
-"""Tools para resumir manifests Kubernetes/OpenShift."""
+"""Tools for summarizing Kubernetes/OpenShift manifests."""
 
 from __future__ import annotations
 
@@ -128,12 +128,12 @@ def build_manifest_tools(artifacts_dir: Path) -> list[FunctionTool]:
     def summarize_manifest(path: str) -> str:
         target = _safe_resolve(artifacts_dir, path)
         if not target.is_file():
-            return f"Arquivo não encontrado: {path}"
+            return f"File not found: {path}"
         try:
             text = target.read_text(encoding="utf-8", errors="replace")
             docs = list(yaml.safe_load_all(text))
         except Exception as exc:  # noqa: BLE001
-            return f"Falha ao parsear YAML {path}: {exc}"
+            return f"Failed to parse YAML {path}: {exc}"
 
         summaries = []
         for doc in docs:
@@ -142,7 +142,7 @@ def build_manifest_tools(artifacts_dir: Path) -> list[FunctionTool]:
             summaries.append(summarize_doc(doc))
 
         if not summaries:
-            return f"Nenhum documento YAML válido em {path}"
+            return f"No valid YAML documents in {path}"
 
         return json.dumps(summaries, indent=2, ensure_ascii=False, default=str)
 

@@ -1,4 +1,4 @@
-"""Achados de configuração em workloads e rotas."""
+"""Configuration findings for workloads and routes."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from agent.analysis.yaml_util import app_label, load_yaml_docs, meta_name
 
 @dataclass
 class Finding:
-    severity: str  # alto | medio | baixo
+    severity: str  # high | medium | low
     title: str
     detail: str
     path: str = ""
-    area: str = "aplicacao"  # infraestrutura | aplicacao
+    area: str = "aplicacao"  # infrastructure | application
 
 
 @dataclass
