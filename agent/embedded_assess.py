@@ -29,6 +29,7 @@ from agent.analysis.resources import ResourceAnalysis, analyze_resources, render
 from agent.analysis.topology import analyze_topology, render_topology_md
 from agent.analysis.worknodes import discover_worknodes
 from agent.config import EmbeddedSettings
+from agent.i18n import get_locale_spec, translate_markdown
 from agent.local_analyze import _demote_headings, _render_findings_block, resolve_report_path
 
 
@@ -451,10 +452,18 @@ def _build_namespace_result(
     )
 
 
-def _build_evidence_prompt(results: list[NamespaceEmbeddedResult], artifacts_dir: Path) -> str:
+def _build_evidence_prompt(
+    results: list[NamespaceEmbeddedResult],
+    artifacts_dir: Path,
+    locale: str,
+) -> str:
+    spec = get_locale_spec(locale)
     lines = [
         "Diretorio de artefatos: " + str(artifacts_dir),
-        "Gere uma sintese executiva curta em pt-BR usando apenas os fatos abaixo.",
+        (
+            "Gere uma sintese executiva curta no idioma "
+            f"{spec.markdown_language_name} usando apenas os fatos abaixo."
+        ),
         "Nao invente metricas nem recursos ausentes.",
         "",
     ]
@@ -492,7 +501,8 @@ def _build_evidence_prompt(results: list[NamespaceEmbeddedResult], artifacts_dir
     return "\n".join(lines)
 
 
-def _generate_local_summary(settings: EmbeddedSettings, prompt: str) -> str:
+def _generate_local_summary(settings: EmbeddedSettings, prompt: str, locale: str) -> str:
+    spec = get_locale_spec(locale)
     try:
         client = OpenAI(
             api_key=settings.api_key,
@@ -507,7 +517,8 @@ def _generate_local_summary(settings: EmbeddedSettings, prompt: str) -> str:
                     "role": "system",
                     "content": (
                         "Voce e um especialista em OpenShift/SRE. "
-                        "Escreva em pt-BR de forma objetiva, usando apenas as evidencias fornecidas."
+                        "Escreva de forma objetiva, usando apenas as evidencias fornecidas, "
+                        f"no idioma {spec.markdown_language_name}."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -535,6 +546,7 @@ def run_embedded_assessment(
     artifacts_dir: Path,
     report_path: Path | None,
     settings: EmbeddedSettings,
+    locale: str = "pt-BR",
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
@@ -547,7 +559,9 @@ def run_embedded_assessment(
     worknodes = discover_worknodes(artifacts_dir)
     results = [_build_namespace_result(ns, worknodes) for ns in namespaces]
     summary_md = _generate_local_summary(
-        settings, _build_evidence_prompt(results, artifacts_dir)
+        settings,
+        _build_evidence_prompt(results, artifacts_dir, locale),
+        locale,
     )
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -619,6 +633,7 @@ def run_embedded_assessment(
     parts.extend(["---", "", REFERENCES_MD.strip(), ""])
     content = "\n".join(parts)
     content = re.sub(r"\n{3,}", "\n\n", content)
+    content = translate_markdown(content, locale)
     out.write_text(content, encoding="utf-8")
     print(f"[agent] Embedded mode via local endpoint: {settings.base_url}")
     print(f"[agent] Embedded model: {settings.model}")

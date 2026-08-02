@@ -6,10 +6,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.i18n import DEFAULT_LOCALE, translate_markdown
+
 
 @dataclass
 class ReportBuilder:
     artifacts_dir: Path
+    locale: str = DEFAULT_LOCALE
     sections: list[tuple[str, str]] = field(default_factory=list)
 
     def add_section(self, title: str, body: str) -> None:
@@ -27,7 +30,7 @@ class ReportBuilder:
     def render(self) -> str:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         lines = [
-            "# Assessment Report — OpenShift Applications",
+            "# Relatório de assessment OpenShift",
             "",
             f"_Gerado em {now}_",
             f"_Artefatos: `{self.artifacts_dir}`_",
@@ -48,7 +51,7 @@ class ReportBuilder:
                 lines.append("")
                 lines.append(body)
                 lines.append("")
-        return "\n".join(lines)
+            return translate_markdown("\n".join(lines), self.locale)
 
     def write(self, filename: str = "assessment-report.md") -> Path:
         out = self.artifacts_dir / filename

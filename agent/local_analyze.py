@@ -16,6 +16,7 @@ from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
 from agent.analysis.worknodes import discover_worknodes
+from agent.i18n import translate_markdown
 
 
 def resolve_report_path(
@@ -65,6 +66,7 @@ def _render_findings_block(ns_name: str, findings) -> str:
 def run_local_assessment(
     artifacts_dir: Path,
     report_path: Path | None = None,
+    locale: str = "pt-BR",
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
@@ -172,6 +174,7 @@ def run_local_assessment(
     content = "\n".join(parts)
     # Normalize repeated blank lines.
     content = re.sub(r"\n{3,}", "\n\n", content)
+    content = translate_markdown(content, locale)
     out.write_text(content, encoding="utf-8")
     print(f"[agent] Single report written to: {out}")
     return out

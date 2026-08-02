@@ -7,6 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.i18n import get_locale_spec
+
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
@@ -14,7 +16,7 @@ load_dotenv(_ROOT / ".env")
 ASSESSMENT_PROMPT = """\
 Você é um especialista em OpenShift/Kubernetes. Analise os artefatos neste diretório
 de trabalho (YAML de deployments, services, routes, configmaps, resources e logs)
-e gere UM ÚNICO arquivo Markdown em português do Brasil (com acentuação correta).
+e gere UM ÚNICO arquivo Markdown no idioma {locale_name}.
 
 Grave o relatório exatamente em:
 {report_path}
@@ -67,6 +69,7 @@ Regras:
 def run_cursor_assessment(
     artifacts_dir: Path,
     report_path: Path | None = None,
+    locale: str = "pt-BR",
 ) -> Path:
     try:
         from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
@@ -93,7 +96,11 @@ def run_cursor_assessment(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
-    prompt = ASSESSMENT_PROMPT.format(report_path=str(out))
+    spec = get_locale_spec(locale)
+    prompt = ASSESSMENT_PROMPT.format(
+        report_path=str(out),
+        locale_name=spec.markdown_language_name,
+    )
 
     print(f"[agent] LLM mode via Cursor SDK")
     print(f"[agent] Artifacts (cwd): {artifacts_dir}")

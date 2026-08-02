@@ -110,6 +110,19 @@ EMBEDDED_MODEL=mistral
 EMBEDDED_TIMEOUT_S=120
 ```
 
+## Lingua del report
+
+La CLI supporta l'internazionalizzazione del report tramite il parametro `--locale`.
+
+Valori supportati:
+
+- `pt-BR` (predefinito)
+- `en-US`
+- `es-ES`
+- `it-IT`
+
+Se `--locale` non viene specificato, il report viene generato in `pt-BR`.
+
 ## Flusso di esecuzione
 
 ### 1. Preparare o raccogliere gli artefatti
@@ -151,6 +164,14 @@ Modalita embedded:
 ./run.sh --artifacts ./artifacts --mode embedded
 ```
 
+Locale personalizzato:
+
+```bash
+./run.sh --artifacts ./artifacts --mode local --locale en-US
+./run.sh --artifacts ./artifacts --mode embedded --locale es-ES
+./run.sh --artifacts ./artifacts --mode llm --locale it-IT
+```
+
 Percorso personalizzato del report:
 
 ```bash
@@ -164,6 +185,7 @@ Percorso personalizzato del report:
 - analisi deterministica senza chiamate esterne a LLM
 - esamina manifest, routes, services, ConfigMaps, log, operatori, HPA e capacita dei worker node
 - scrive un report Markdown unico basato su euristiche locali
+- traduce il Markdown finale nel locale selezionato con `--locale`
 
 `llm`
 
@@ -171,6 +193,7 @@ Percorso personalizzato del report:
 - se `CURSOR_API_KEY` e impostata, usa Cursor SDK
 - altrimenti, se `LLM_API_KEY` e impostata, usa una API OpenAI-compatible e un loop ReAct guidato da tool
 - scrive un unico report Markdown nella directory degli artefatti o nel percorso passato con `--report`
+- istruisce il modello a rispondere nel locale selezionato con `--locale`
 
 `embedded`
 
@@ -180,6 +203,7 @@ Percorso personalizzato del report:
 - calcola un punteggio di rischio per workload usando findings, log, QoS, assenza di limits/requests e postura delle repliche
 - rileva outlier di requests/limits con analisi basata su IQR
 - invia solo un riassunto compatto delle evidenze a un modello locale OpenAI-compatible, come Ollama + Mistral
+- traduce il Markdown finale nel locale selezionato con `--locale`
 
 ### 5. Verificare l'output
 
@@ -256,6 +280,12 @@ Eseguire direttamente l'analisi embedded:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode embedded
+```
+
+Eseguire con un locale specifico:
+
+```bash
+python -m agent --artifacts ./artifacts --mode local --locale en-US
 ```
 
 ## Note

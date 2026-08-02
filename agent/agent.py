@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import Settings
+from agent.i18n import DEFAULT_LOCALE
 from agent.llm import LLMClient
-from agent.prompts import SYSTEM_PROMPT, build_user_prompt
+from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
 from agent.tools import build_all_tools, openai_tool_schemas, tools_by_name
 from agent.tools.filesystem import build_filesystem_tools
@@ -28,29 +29,50 @@ def _message_content(message: Any) -> str:
     return ""
 
 
-def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
+def _fallback_section_texts(locale: str) -> tuple[str, str, str, str]:
+    if locale == DEFAULT_LOCALE:
+        return (
+            "Resumo do agente",
+            "Notas finais",
+            "Resumo incompleto",
+            "O agente atingiu o limite de iterações antes de concluir a análise.",
+        )
+    return (
+        "Agent summary",
+        "Final notes",
+        "Incomplete summary",
+        "The agent hit the iteration limit before completing the analysis.",
+    )
+
+
+def run_assessment(
+    artifacts_dir: Path,
+    settings: Settings,
+    locale: str = "pt-BR",
+) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
         raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
-    report = ReportBuilder(artifacts_dir=artifacts_dir)
+    report = ReportBuilder(artifacts_dir=artifacts_dir, locale=locale)
     tools = build_all_tools(artifacts_dir, report, settings.max_file_chars)
     registry = tools_by_name(tools)
     schemas = openai_tool_schemas(tools)
 
     inventory = _initial_inventory(artifacts_dir, settings.max_file_chars)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory)},
+        {"role": "system", "content": build_system_prompt(locale)},
+        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory, locale)},
     ]
+    summary_title, final_notes_title, incomplete_title, incomplete_body = _fallback_section_texts(locale)
 
     llm = LLMClient(settings)
-    print(f"[agent] Artefatos: {artifacts_dir}")
-    print(f"[agent] Modelo: {settings.llm_model}")
+    print(f"[agent] Artifacts: {artifacts_dir}")
+    print(f"[agent] Model: {settings.llm_model}")
     print(f"[agent] Tools: {', '.join(registry)}")
 
     for iteration in range(1, settings.max_iterations + 1):
-        print(f"[agent] Iteração {iteration}/{settings.max_iterations}")
+        print(f"[agent] Iteration {iteration}/{settings.max_iterations}")
         response = llm.chat(messages, tools=schemas)
         choice = response.choices[0]
         message = choice.message
@@ -76,9 +98,9 @@ def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
         if not message.tool_calls:
             final_text = _message_content(message).strip()
             if final_text and not report.sections:
-                report.add_section("Resumo do agente", final_text)
+                report.add_section(summary_title, final_text)
             elif final_text:
-                report.add_section("Notas finais", final_text)
+                report.add_section(final_notes_title, final_text)
             break
 
         for tool_call in message.tool_calls:
@@ -114,10 +136,7 @@ def run_assessment(artifacts_dir: Path, settings: Settings) -> Path:
     else:
         print("[agent] Iteration limit reached.")
         if not report.sections:
-            report.add_section(
-                "Resumo incompleto",
-                "O agente atingiu o limite de iterações antes de concluir a análise.",
-            )
+            report.add_section(incomplete_title, incomplete_body)
 
     out = report.write()
     print(f"[agent] Report written to: {out}")

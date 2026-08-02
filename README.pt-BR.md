@@ -1,36 +1,36 @@
 # kubeoptix-analyzer
 
-Analisador offline de artefatos de aplicacoes OpenShift e Kubernetes. Ele le manifests, logs e inventario de worker nodes ja coletados e gera um unico relatorio Markdown.
+Analisador offline de artefatos de aplicações OpenShift e Kubernetes. Ele lê manifests, logs e inventário de worker nodes já coletados e gera um único relatório Markdown.
 
-Versoes do documento: [English](README.md) | [Italiano](README.it.md)
+Versões do documento: [English](README.md) | [Italiano](README.it.md)
 
-## Visao geral
+## Visão geral
 
-Este projeto e a etapa de analise do fluxo KubeOptix.
+Este projeto é a etapa de análise do fluxo KubeOptix.
 
-- `kubeoptix-harvester` conecta em um cluster OpenShift em execucao, coleta os artefatos, remove manifests `Secret` e anonimiza valores sensiveis.
-- `kubeoptix-analyzer` consome esses artefatos preparados e produz um relatorio de assessment.
+- `kubeoptix-harvester` conecta em um cluster OpenShift em execução, coleta os artefatos, remove manifests `Secret` e anonimiza valores sensíveis.
+- `kubeoptix-analyzer` consome esses artefatos preparados e produz um relatório de assessment.
 
-O processo upstream de extracao e tratamento de dados esta documentado no README do harvester:
+O processo upstream de extração e tratamento de dados está documentado no README do harvester:
 
 - https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
 
-De acordo com esse documento, o pipeline dos artefatos e:
+De acordo com esse documento, o pipeline dos artefatos é:
 
 1. Coletar os manifests dos worker nodes.
 2. Coletar recursos dos namespaces e logs dos pods.
 3. Remover os arquivos YAML cujo `kind` seja `Secret`.
-4. Anonimizar in-place padroes sensiveis, como emails, tokens, certificados, chaves e outros segredos.
+4. Anonimizar in-place padrões sensíveis, como emails, tokens, certificados, chaves e outros segredos.
 
-Este analyzer assume que essas etapas ja aconteceram antes do inicio da analise.
+Este analyzer assume que essas etapas já aconteceram antes do início da análise.
 
 ## Requisitos
 
 - Python 3.9+
 - Bash
-- Um diretorio de artefatos gerado pelo `kubeoptix-harvester` ou por outro coletor compativel
+- Um diretório de artefatos gerado pelo `kubeoptix-harvester` ou por outro coletor compatível
 
-## Instalacao
+## Instalação
 
 ```bash
 python3 -m venv .venv
@@ -80,9 +80,9 @@ O analyzer aceita os dois layouts abaixo.
         pod-logs/
 ```
 
-## Configuracao
+## Configuração
 
-O CLI carrega variaveis do arquivo `.env` na raiz do projeto.
+O CLI carrega variáveis do arquivo `.env` na raiz do projeto.
 
 Exemplo:
 
@@ -98,8 +98,8 @@ CURSOR_MODEL=composer-2.5
 
 O modo LLM agora valida o `.env` antes de executar:
 
-- se o `.env` nao existir, a execucao para com erro amigavel
-- se `CURSOR_API_KEY` e `LLM_API_KEY` estiverem vazias, a execucao para com erro amigavel
+- se o `.env` não existir, a execução para com erro amigável
+- se `CURSOR_API_KEY` e `LLM_API_KEY` estiverem vazias, a execução para com erro amigável
 
 O modo embedded usa um endpoint local OpenAI-compatible. Exemplo com Ollama e uma variante quantizada de Mistral 7B Instruct:
 
@@ -110,25 +110,38 @@ EMBEDDED_MODEL=mistral
 EMBEDDED_TIMEOUT_S=120
 ```
 
-## Fluxo de execucao
+## Idioma do relatório
+
+O CLI suporta internacionalização do relatório pelo parâmetro `--locale`.
+
+Valores suportados:
+
+- `pt-BR` (padrão)
+- `en-US`
+- `es-ES`
+- `it-IT`
+
+Se `--locale` não for informado, o relatório será gerado em `pt-BR`.
+
+## Fluxo de execução
 
 ### 1. Preparar ou coletar os artefatos
 
-Use o `kubeoptix-harvester` primeiro para exportar os dados do cluster, remover manifests `Secret` e anonimizar o conteudo sensivel.
+Use o `kubeoptix-harvester` primeiro para exportar os dados do cluster, remover manifests `Secret` e anonimizar o conteúdo sensível.
 
-### 2. Instalar dependencias
+### 2. Instalar dependências
 
 ```bash
 ./run.sh --help
 ```
 
-Na primeira execucao do script wrapper, ele vai:
+Na primeira execução do script wrapper, ele vai:
 
 1. Resolver a raiz do projeto.
-2. Criar `.venv/` se ela nao existir.
+2. Criar `.venv/` se ela não existir.
 3. Ativar o ambiente virtual.
 4. Atualizar o `pip`.
-5. Instalar as dependencias de `requirements.txt`.
+5. Instalar as dependências de `requirements.txt`.
 6. Iniciar `python -m agent` com os mesmos argumentos de CLI.
 
 ### 3. Executar o analyzer
@@ -151,120 +164,137 @@ Modo embedded:
 ./run.sh --artifacts ./artifacts --mode embedded
 ```
 
-Caminho customizado do relatorio:
+Locale customizado:
+
+```bash
+./run.sh --artifacts ./artifacts --mode local --locale en-US
+./run.sh --artifacts ./artifacts --mode embedded --locale es-ES
+./run.sh --artifacts ./artifacts --mode llm --locale it-IT
+```
+
+Caminho customizado do relatório:
 
 ```bash
 ./run.sh --artifacts ./artifacts --report ./out/assessment-report.md
 ```
 
-### 4. Escolher o modo de analise
+### 4. Escolher o modo de análise
 
 `local`
 
-- analise deterministica sem chamadas externas para LLM
+- análise determinística sem chamadas externas para LLM
 - varre manifests, routes, services, ConfigMaps, logs, operadores, HPAs e capacidade dos worker nodes
-- grava um relatorio Markdown diretamente a partir de heuristicas locais
+- grava um relatório Markdown diretamente a partir de heurísticas locais
+- traduz o Markdown final para o locale selecionado em `--locale`
 
 `llm`
 
 - valida que existe `.env` com credenciais
 - se `CURSOR_API_KEY` estiver definida, usa Cursor SDK
-- caso contrario, se `LLM_API_KEY` estiver definida, usa uma API OpenAI-compatible e um loop ReAct dirigido por tools
-- grava um unico relatorio Markdown no diretorio de artefatos ou no caminho informado em `--report`
+- caso contrário, se `LLM_API_KEY` estiver definida, usa uma API OpenAI-compatible e um loop ReAct dirigido por tools
+- grava um único relatório Markdown no diretório de artefatos ou no caminho informado em `--report`
+- instrui o modelo a responder no locale selecionado em `--locale`
 
 `embedded`
 
-- executa primeiro a analise local deterministica
-- calcula classificacao heuristica + reranking dos achados
+- executa primeiro a análise local determinística
+- calcula classificação heurística + reranking dos achados
 - agrupa erros de log repetidos por assinatura normalizada
-- calcula score de risco por workload com base em achados, logs, QoS, ausencia de limits/requests e postura de replicas
-- detecta outliers de requests/limits com analise baseada em IQR
-- envia apenas um resumo compacto das evidencias para um modelo local OpenAI-compatible, como Ollama + Mistral
+- calcula score de risco por workload com base em achados, logs, QoS, ausência de limits/requests e postura de réplicas
+- detecta outliers de requests/limits com análise baseada em IQR
+- envia apenas um resumo compacto das evidências para um modelo local OpenAI-compatible, como Ollama + Mistral
+- traduz o Markdown final para o locale selecionado em `--locale`
 
-### 5. Revisar a saida
+### 5. Revisar a saída
 
-Por padrao, o arquivo gerado e:
+Por padrão, o arquivo gerado é:
 
 ```text
 <artifacts>/assessment-report.md
 ```
 
-O relatorio cobre inventario, topologia, recursos, observabilidade, verificacoes de seguranca em ConfigMaps, achados, plano de acao e referencias.
+O relatório cobre inventário, topologia, recursos, observabilidade, verificações de segurança em ConfigMaps, achados, plano de ação e referências.
 
 ## Fluxo interno do analyzer
 
 ```mermaid
 flowchart TD
-    A[Diretorio de artefatos preparados] --> B[run.sh]
+    A[Diretório de artefatos preparados] --> B[run.sh]
     B --> C[Cria ou reutiliza .venv]
-    C --> D[Instala dependencias]
+    C --> D[Instala dependências]
     D --> E[python -m agent]
     E --> F{Modo}
 
     F -->|local| G[Descobre namespaces e worknodes]
     G --> H[Parse de manifests YAML e logs]
-    H --> I[Executa modulos de analise local]
+    H --> I[Executa módulos de análise local]
     I --> J[Grava assessment-report.md]
 
     F -->|llm| K[Valida .env e credenciais]
     K --> L{Provider}
-    L -->|Cursor| M[Prompt via Cursor SDK sobre o diretorio]
-    L -->|OpenAI-compatible| N[Inventaria artefatos e expoe tools locais]
+    L -->|Cursor| M[Prompt via Cursor SDK sobre o diretório]
+    L -->|OpenAI-compatible| N[Inventaria artefatos e expõe tools locais]
     N --> O[Loop ReAct dirigido por tools]
-    F -->|embedded| Q[Executa a analise local deterministica]
-    Q --> R[Aplica reranking heuristico e score de risco]
+    F -->|embedded| Q[Executa a análise local determinística]
+    Q --> R[Aplica reranking heurístico e score de risco]
     R --> S[Agrupa erros de log e detecta outliers]
     S --> T[Envia resumo compacto para modelo local OpenAI-compatible]
-    M --> P[Grava relatorio Markdown]
+    M --> P[Grava relatório Markdown]
     O --> P
     T --> P
 ```
 
-## O que o modo local analisa
+  ## O que o modo local analisa
 
 - descoberta de namespaces
-- inventario de aplicacoes
-- topologia inferida de Deployments, Services, Routes e ConfigMaps
-- requests e limits de CPU e memoria
+  - inventário de aplicações
+  - topologia inferida de Deployments, Services, Routes e ConfigMaps
+  - requests e limits de CPU e memória
 - totais allocatable e capacity dos worker nodes
-- recursos relacionados a HPA e observabilidade
-- padroes de erro em logs, como crash, OOM, timeout e falha de conexao
-- padroes arriscados de configuracao em manifests e ConfigMaps
+  - recursos relacionados a HPA e observabilidade
+  - padrões de erro em logs, como crash, OOM, timeout e falha de conexão
+  - padrões arriscados de configuração em manifests e ConfigMaps
 - inventario de operadores a partir de CSVs, Subscriptions e PackageManifests
 
 ## Comandos principais
 
-Exibir ajuda do CLI:
+  Exibir ajuda do CLI:
 
 ```bash
 python -m agent --help
 ```
 
-Executar analise local diretamente:
+Executar análise local diretamente:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode local
 ```
 
-Executar analise LLM diretamente:
+Executar análise LLM diretamente:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode llm
 ```
 
-Executar analise embedded diretamente:
+Executar análise embedded diretamente:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode embedded
 ```
 
-## Observacoes
+Executar com locale específico:
 
-- O analyzer e offline em relacao ao cluster. Ele apenas le artefatos locais.
-- A qualidade do relatorio depende da completude dos artefatos coletados.
-- O modo LLM nao substitui a sanitizacao dos artefatos. A remocao de dados sensiveis deve acontecer antes, no pipeline do harvester.
+```bash
+python -m agent --artifacts ./artifacts --mode local --locale en-US
+```
 
-## Versoes do documento
+## Observações
+
+- O analyzer é offline em relação ao cluster. Ele apenas lê artefatos locais.
+- A qualidade do relatório depende da completude dos artefatos coletados.
+- O modo LLM não substitui a sanitização dos artefatos. A remoção de dados sensíveis deve acontecer antes, no pipeline do harvester.
+
+## Versões do documento
 
 - [English](README.md)
 - [PT-BR](README.pt-BR.md)

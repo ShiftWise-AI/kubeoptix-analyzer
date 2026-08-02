@@ -110,6 +110,19 @@ EMBEDDED_MODEL=mistral
 EMBEDDED_TIMEOUT_S=120
 ```
 
+## Report locale
+
+The CLI supports report internationalization through `--locale`.
+
+Supported values:
+
+- `pt-BR` (default)
+- `en-US`
+- `es-ES`
+- `it-IT`
+
+If `--locale` is omitted, the report is generated in `pt-BR`.
+
 ## Execution flow
 
 ### 1. Prepare or collect artifacts
@@ -151,6 +164,14 @@ Embedded mode:
 ./run.sh --artifacts ./artifacts --mode embedded
 ```
 
+Custom locale:
+
+```bash
+./run.sh --artifacts ./artifacts --mode local --locale en-US
+./run.sh --artifacts ./artifacts --mode embedded --locale es-ES
+./run.sh --artifacts ./artifacts --mode llm --locale it-IT
+```
+
 Custom report path:
 
 ```bash
@@ -164,6 +185,7 @@ Custom report path:
 - deterministic analysis without external LLM calls
 - scans manifests, routes, services, ConfigMaps, logs, operators, HPAs, and worker-node capacity
 - writes one Markdown report directly from local heuristics
+- translates the final Markdown to the locale selected with `--locale`
 
 `llm`
 
@@ -171,6 +193,7 @@ Custom report path:
 - if `CURSOR_API_KEY` is set, uses Cursor SDK
 - otherwise, if `LLM_API_KEY` is set, uses an OpenAI-compatible API and a tool-driven ReAct loop
 - writes a single Markdown report to the artifact directory or the path passed with `--report`
+- instructs the model to answer in the locale selected with `--locale`
 
 `embedded`
 
@@ -180,6 +203,7 @@ Custom report path:
 - scores workload risk using findings, logs, QoS, missing limits/requests, and replica posture
 - detects requests/limits outliers with IQR-based analysis
 - sends only the compact evidence summary to a local OpenAI-compatible model such as Ollama + Mistral
+- translates the final Markdown to the locale selected with `--locale`
 
 ### 5. Review the output
 
@@ -256,6 +280,12 @@ Run embedded analysis directly:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode embedded
+```
+
+Run with a specific report locale:
+
+```bash
+python -m agent --artifacts ./artifacts --mode local --locale en-US
 ```
 
 ## Notes
