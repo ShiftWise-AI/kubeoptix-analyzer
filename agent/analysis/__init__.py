@@ -1,1 +1,1 @@
-"""Pacote de análises locais do assessment OCP."""
+"""Package containing local analysis modules for the OCP assessment."""

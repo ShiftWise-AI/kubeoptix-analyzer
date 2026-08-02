@@ -1,4 +1,4 @@
-"""Análise de logs, métricas e monitoramento."""
+"""Analysis of logs, metrics, and monitoring resources."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def analyze_observability(
 
 
 def _mermaid_pie(title: str, data: Counter, limit: int = 10) -> str:
-    """Gráfico pizza Mermaid (erros / distribuição quantitativa)."""
+    """Mermaid pie chart for errors or other quantitative distributions."""
     items = data.most_common(limit)
     lines = ["```mermaid", "pie showData", f"    title {title}"]
     if not items:

@@ -10,6 +10,7 @@ um relatório de assessment claro e acionável.
 Foque em:
 - Inventário de namespaces e aplicações
 - Saúde e configuração de Deployments/DeploymentConfigs/StatefulSets (replicas, images, probes, resources)
+- Escalabilidade e otimização de recursos (CPU/memória requests/limits, QoS, HPA)
 - Exposição via Routes e Services
 - Problemas evidentes em logs (erros, OOM, CrashLoop, timeouts)
 - Riscos de configuração (sem probes, sem limits, imagens :latest, etc.)

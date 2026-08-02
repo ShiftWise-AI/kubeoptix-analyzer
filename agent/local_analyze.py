@@ -1,4 +1,4 @@
-"""Orquestração da análise local → um único Markdown em pt-BR."""
+"""Orchestration of local analysis into a single pt-BR Markdown report."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def resolve_report_path(
     artifacts_dir: Path,
     report_path: Path | None = None,
 ) -> Path:
-    """Aceita arquivo .md ou diretório (grava assessment-report.md dentro)."""
+    """Accept a .md file or a directory (writes assessment-report.md inside it)."""
     if report_path is None:
         return (artifacts_dir / "assessment-report.md").resolve()
 
@@ -33,7 +33,7 @@ def resolve_report_path(
 
 
 def _demote_headings(md: str, levels: int = 1) -> str:
-    """Rebaixa títulos Markdown para caber como seção do relatório único."""
+    """Demote Markdown headings so they fit under the single report structure."""
     prefix = "#" * levels
 
     def repl(match: re.Match[str]) -> str:
@@ -68,7 +68,7 @@ def run_local_assessment(
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
-        raise SystemExit(f"Diretório de artefatos inválido: {artifacts_dir}")
+        raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
     out = resolve_report_path(artifacts_dir, report_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -170,8 +170,8 @@ def run_local_assessment(
     parts.append("")
 
     content = "\n".join(parts)
-    # Normaliza múltiplas linhas em branco
+    # Normalize repeated blank lines.
     content = re.sub(r"\n{3,}", "\n\n", content)
     out.write_text(content, encoding="utf-8")
-    print(f"[agent] Relatório único gravado em: {out}")
+    print(f"[agent] Single report written to: {out}")
     return out

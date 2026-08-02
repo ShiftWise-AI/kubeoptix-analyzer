@@ -1,4 +1,4 @@
-"""Tools para escanear logs de pods."""
+"""Tools for scanning pod logs."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
     ) -> str:
         base = _safe_resolve(artifacts_dir, path)
         if not base.exists():
-            return f"Path não encontrado: {path}"
+            return f"Path not found: {path}"
 
         regexes = [re.compile(p) for p in (patterns or DEFAULT_PATTERNS)]
         log_files: list[Path]
@@ -51,7 +51,7 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
             )
 
         if not log_files:
-            return f"Nenhum arquivo de log encontrado em {path}"
+            return f"No log files found in {path}"
 
         hits: list[str] = []
         files_scanned = 0
@@ -60,7 +60,7 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
             try:
                 text = log_file.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                hits.append(f"{log_file.relative_to(artifacts_dir)}: falha ao ler ({exc})")
+                hits.append(f"{log_file.relative_to(artifacts_dir)}: read failure ({exc})")
                 continue
 
             rel = log_file.relative_to(artifacts_dir).as_posix()
@@ -77,7 +77,7 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
 
         header = f"Arquivos escaneados: {files_scanned}; hits: {len(hits)}"
         if not hits:
-            return header + "\nNenhum padrão de erro encontrado."
+            return header + "\nNo error patterns found."
         return header + "\n" + "\n".join(hits)
 
     return [

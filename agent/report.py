@@ -1,4 +1,4 @@
-"""Montagem e persistência do relatório Markdown."""
+"""Markdown report assembly and persistence."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ class ReportBuilder:
         title = title.strip()
         body = body.strip()
         if not title:
-            raise ValueError("Título da seção não pode ser vazio")
-        # Atualiza seção existente com mesmo título.
+            raise ValueError("Section title cannot be empty")
+        # Update an existing section with the same title.
         for idx, (existing_title, _) in enumerate(self.sections):
             if existing_title.lower() == title.lower():
                 self.sections[idx] = (title, body)

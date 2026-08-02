@@ -1,4 +1,4 @@
-"""Assessment via Cursor SDK (CURSOR_API_KEY da assinatura)."""
+"""Assessment via Cursor SDK (subscription CURSOR_API_KEY)."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def run_cursor_assessment(
         from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
     except ImportError as exc:
         raise SystemExit(
-            "Pacote cursor-sdk não instalado. Execute:\n"
+            "cursor-sdk package is not installed. Run:\n"
             "  pip install cursor-sdk\n"
         ) from exc
 
@@ -80,12 +80,12 @@ def run_cursor_assessment(
 
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
-        raise SystemExit(f"Diretório de artefatos inválido: {artifacts_dir}")
+        raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
     api_key = os.getenv("CURSOR_API_KEY", "").strip()
     if not api_key:
         raise SystemExit(
-            "CURSOR_API_KEY não definida. Configure no .env "
+            "CURSOR_API_KEY is not set. Configure it in .env "
             "(https://cursor.com/dashboard/api)."
         )
 
@@ -95,10 +95,10 @@ def run_cursor_assessment(
     model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
     prompt = ASSESSMENT_PROMPT.format(report_path=str(out))
 
-    print(f"[agent] Modo LLM via Cursor SDK")
-    print(f"[agent] Artefatos (cwd): {artifacts_dir}")
-    print(f"[agent] Modelo: {model}")
-    print(f"[agent] Relatório alvo: {out}")
+    print(f"[agent] LLM mode via Cursor SDK")
+    print(f"[agent] Artifacts (cwd): {artifacts_dir}")
+    print(f"[agent] Model: {model}")
+    print(f"[agent] Target report: {out}")
 
     result = Agent.prompt(
         prompt,
@@ -111,24 +111,24 @@ def run_cursor_assessment(
 
     status = getattr(result, "status", None)
     text = getattr(result, "result", None) or ""
-    print(f"[agent] Status Cursor: {status}")
+    print(f"[agent] Cursor status: {status}")
     if text:
         preview = str(text).strip()
         if len(preview) > 400:
             preview = preview[:400] + "..."
-        print(f"[agent] Resumo: {preview}")
+        print(f"[agent] Summary: {preview}")
 
     if not out.is_file():
-        # Fallback: se o agente só devolveu texto, gravamos nós mesmos
+        # Fallback: if the agent returned only text, write it ourselves.
         if text and str(text).strip():
             out.write_text(str(text).strip() + "\n", encoding="utf-8")
-            print(f"[agent] Relatório gravado a partir da resposta do modelo: {out}")
+            print(f"[agent] Report written from model output: {out}")
         else:
             raise SystemExit(
-                f"O agente Cursor terminou sem criar o arquivo: {out}\n"
+                f"The Cursor agent finished without creating the file: {out}\n"
                 f"Status: {status}"
             )
     else:
-        print(f"[agent] Relatório gerado em: {out}")
+        print(f"[agent] Report generated at: {out}")
 
     return out

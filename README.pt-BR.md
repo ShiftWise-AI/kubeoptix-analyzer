@@ -101,6 +101,15 @@ O modo LLM agora valida o `.env` antes de executar:
 - se o `.env` nao existir, a execucao para com erro amigavel
 - se `CURSOR_API_KEY` e `LLM_API_KEY` estiverem vazias, a execucao para com erro amigavel
 
+O modo embedded usa um endpoint local OpenAI-compatible. Exemplo com Ollama e uma variante quantizada de Mistral 7B Instruct:
+
+```dotenv
+EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
+EMBEDDED_API_KEY=ollama
+EMBEDDED_MODEL=mistral
+EMBEDDED_TIMEOUT_S=120
+```
+
 ## Fluxo de execucao
 
 ### 1. Preparar ou coletar os artefatos
@@ -136,6 +145,12 @@ Modo LLM:
 ./run.sh --artifacts ./artifacts --mode llm
 ```
 
+Modo embedded:
+
+```bash
+./run.sh --artifacts ./artifacts --mode embedded
+```
+
 Caminho customizado do relatorio:
 
 ```bash
@@ -156,6 +171,15 @@ Caminho customizado do relatorio:
 - se `CURSOR_API_KEY` estiver definida, usa Cursor SDK
 - caso contrario, se `LLM_API_KEY` estiver definida, usa uma API OpenAI-compatible e um loop ReAct dirigido por tools
 - grava um unico relatorio Markdown no diretorio de artefatos ou no caminho informado em `--report`
+
+`embedded`
+
+- executa primeiro a analise local deterministica
+- calcula classificacao heuristica + reranking dos achados
+- agrupa erros de log repetidos por assinatura normalizada
+- calcula score de risco por workload com base em achados, logs, QoS, ausencia de limits/requests e postura de replicas
+- detecta outliers de requests/limits com analise baseada em IQR
+- envia apenas um resumo compacto das evidencias para um modelo local OpenAI-compatible, como Ollama + Mistral
 
 ### 5. Revisar a saida
 
@@ -187,8 +211,13 @@ flowchart TD
     L -->|Cursor| M[Prompt via Cursor SDK sobre o diretorio]
     L -->|OpenAI-compatible| N[Inventaria artefatos e expoe tools locais]
     N --> O[Loop ReAct dirigido por tools]
+    F -->|embedded| Q[Executa a analise local deterministica]
+    Q --> R[Aplica reranking heuristico e score de risco]
+    R --> S[Agrupa erros de log e detecta outliers]
+    S --> T[Envia resumo compacto para modelo local OpenAI-compatible]
     M --> P[Grava relatorio Markdown]
     O --> P
+    T --> P
 ```
 
 ## O que o modo local analisa
@@ -221,6 +250,12 @@ Executar analise LLM diretamente:
 
 ```bash
 python -m agent --artifacts ./artifacts --mode llm
+```
+
+Executar analise embedded diretamente:
+
+```bash
+python -m agent --artifacts ./artifacts --mode embedded
 ```
 
 ## Observacoes

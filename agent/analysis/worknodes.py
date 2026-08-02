@@ -1,4 +1,4 @@
-"""Capacidade dos worker nodes (pasta worknodes/ da coleta)."""
+"""Worker node capacity (from the collected worknodes/ directory)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class WorknodeCapacity:
 
 
 def _find_worknodes_dir(artifacts_dir: Path) -> Path | None:
-    """Procura worknodes/ na raiz dos artefatos ou no diretório pai."""
+    """Look for worknodes/ at the artifact root or in the parent directory."""
     candidates = [
         artifacts_dir / "worknodes",
         artifacts_dir.parent / "worknodes",
