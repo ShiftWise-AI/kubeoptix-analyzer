@@ -1,28 +1,28 @@
 # kubeoptix-analyzer
 
-Analizzatore offline per artefatti di applicazioni OpenShift e Kubernetes. Legge manifest, log e inventari dei worker node gia raccolti e genera un unico report Markdown.
+Analizzatore offline per artefatti di applicazioni OpenShift e Kubernetes. Legge manifest, log e inventari dei worker node già raccolti e genera un unico report Markdown.
 
 Versioni del documento: [English](README.md) | [PT-BR](README.pt-BR.md)
 
 ## Panoramica
 
-Questo progetto e la fase di analisi del flusso KubeOptix.
+Questo progetto è la fase di analisi del flusso KubeOptix.
 
 - `kubeoptix-harvester` si collega a un cluster OpenShift attivo, raccoglie gli artefatti, rimuove i manifest `Secret` e anonimizza i valori sensibili.
 - `kubeoptix-analyzer` consuma questi artefatti preparati e produce un report di assessment.
 
-Il processo upstream di estrazione e trattamento dei dati e documentato nel README del harvester:
+Il processo upstream di estrazione e trattamento dei dati è documentato nel README del harvester:
 
 - https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
 
-Secondo quel documento, la pipeline degli artefatti e:
+Secondo quel documento, la pipeline degli artefatti è:
 
 1. Raccogliere i manifest dei worker node.
 2. Raccogliere le risorse dei namespace e i log dei pod.
-3. Rimuovere i file YAML il cui `kind` e `Secret`.
+3. Rimuovere i file YAML il cui `kind` è `Secret`.
 4. Anonimizzare in-place i pattern sensibili, inclusi email, token, certificati, chiavi e altri segreti.
 
-Questo analyzer presume che questi passaggi siano gia stati eseguiti prima dell'analisi.
+Questo analyzer presume che questi passaggi siano già stati eseguiti prima dell'analisi.
 
 ## Requisiti
 
@@ -96,12 +96,12 @@ CURSOR_MODEL=composer-2.5
 # LLM_MODEL=gpt-4o-mini
 ```
 
-La modalita LLM ora valida il file `.env` prima dell'esecuzione:
+La modalità LLM ora valida il file `.env` prima dell'esecuzione:
 
 - se `.env` non esiste, l'esecuzione si interrompe con un errore leggibile
 - se `CURSOR_API_KEY` e `LLM_API_KEY` sono entrambe vuote, l'esecuzione si interrompe con un errore leggibile
 
-La modalita embedded usa un endpoint locale OpenAI-compatible. Esempio con Ollama e una variante quantizzata di Mistral 7B Instruct:
+La modalità embedded usa un endpoint locale OpenAI-compatible. Esempio con Ollama e una variante quantizzata di Mistral 7B Instruct:
 
 ```dotenv
 EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
@@ -146,19 +146,19 @@ Alla prima esecuzione dello script wrapper, esso:
 
 ### 3. Eseguire l'analyzer
 
-Modalita locale:
+Modalità locale:
 
 ```bash
 ./run.sh --artifacts ./artifacts
 ```
 
-Modalita LLM:
+Modalità LLM:
 
 ```bash
 ./run.sh --artifacts ./artifacts --mode llm
 ```
 
-Modalita embedded:
+Modalità embedded:
 
 ```bash
 ./run.sh --artifacts ./artifacts --mode embedded
@@ -178,20 +178,20 @@ Percorso personalizzato del report:
 ./run.sh --artifacts ./artifacts --report ./out/assessment-report.md
 ```
 
-### 4. Scegliere la modalita di analisi
+### 4. Scegliere la modalità di analisi
 
 `local`
 
 - analisi deterministica senza chiamate esterne a LLM
-- esamina manifest, routes, services, ConfigMaps, log, operatori, HPA e capacita dei worker node
+- esamina manifest, routes, services, ConfigMaps, log, operatori, HPA e capacità dei worker node
 - scrive un report Markdown unico basato su euristiche locali
 - traduce il Markdown finale nel locale selezionato con `--locale`
 
 `llm`
 
 - valida che `.env` esista e contenga credenziali
-- se `CURSOR_API_KEY` e impostata, usa Cursor SDK
-- altrimenti, se `LLM_API_KEY` e impostata, usa una API OpenAI-compatible e un loop ReAct guidato da tool
+- se `CURSOR_API_KEY` è impostata, usa Cursor SDK
+- altrimenti, se `LLM_API_KEY` è impostata, usa una API OpenAI-compatible e un loop ReAct guidato da tool
 - scrive un unico report Markdown nella directory degli artefatti o nel percorso passato con `--report`
 - istruisce il modello a rispondere nel locale selezionato con `--locale`
 
@@ -207,13 +207,13 @@ Percorso personalizzato del report:
 
 ### 5. Verificare l'output
 
-Per default, il file generato e:
+Per default, il file generato è:
 
 ```text
 <artifacts>/assessment-report.md
 ```
 
-Il report copre inventario, topologia, risorse, osservabilita, controlli di sicurezza sui ConfigMap, findings, action plan e riferimenti.
+Il report copre inventario, topologia, risorse, osservabilità, controlli di sicurezza sui ConfigMap, findings, action plan e riferimenti.
 
 ## Flusso interno dell'analyzer
 
@@ -244,14 +244,14 @@ flowchart TD
     T --> P
 ```
 
-## Cosa analizza la modalita locale
+## Cosa analizza la modalità locale
 
 - scoperta dei namespace
 - inventario delle applicazioni
 - topologia inferita da Deployments, Services, Routes e ConfigMaps
 - requests e limits di CPU e memoria
 - totali allocatable e capacity dei worker node
-- risorse correlate a HPA e osservabilita
+- risorse correlate a HPA e osservabilità
 - pattern di errore nei log come crash, OOM, timeout e fallimenti di connessione
 - pattern rischiosi di configurazione in manifest e ConfigMaps
 - inventario degli operatori da CSV, Subscriptions e PackageManifests
@@ -290,9 +290,9 @@ python -m agent --artifacts ./artifacts --mode local --locale en-US
 
 ## Note
 
-- L'analyzer e offline rispetto al cluster. Legge solo artefatti locali.
-- La qualita del report dipende dalla completezza degli artefatti raccolti.
-- La modalita LLM non sostituisce la sanitizzazione degli artefatti. La rimozione dei dati sensibili deve avvenire prima, nella pipeline del harvester.
+- L'analyzer è offline rispetto al cluster. Legge solo artefatti locali.
+- La qualità del report dipende dalla completezza degli artefatti raccolti.
+- La modalità LLM non sostituisce la sanitizzazione degli artefatti. La rimozione dei dati sensibili deve avvenire prima, nella pipeline del harvester.
 
 ## Versioni del documento
 
