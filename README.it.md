@@ -8,12 +8,12 @@ Versioni del documento: [English](README.md) | [PT-BR](README.pt-BR.md)
 
 Questo progetto è la fase di analisi del flusso KubeOptix.
 
-- `kubeoptix-harvester` si collega a un cluster OpenShift attivo, raccoglie gli artefatti, rimuove i manifest `Secret` e anonimizza i valori sensibili.
+- `kubeoptix-analyzer` si collega a un cluster OpenShift attivo, raccoglie gli artefatti, rimuove i manifest `Secret` e anonimizza i valori sensibili.
 - `kubeoptix-analyzer` consuma questi artefatti preparati e produce un report di assessment.
 
 Il processo upstream di estrazione e trattamento dei dati è documentato nel README del harvester:
 
-- https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
+- https://github.com/ShiftWise-AI/kubeoptix-analyzer/blob/main/README.md
 
 Secondo quel documento, la pipeline degli artefatti è:
 
@@ -28,7 +28,7 @@ Questo analyzer presume che questi passaggi siano già stati eseguiti prima dell
 
 - Python 3.9+
 - Bash
-- Una directory di artefatti prodotta da `kubeoptix-harvester` o da un altro collector compatibile
+- Una directory di artefatti prodotta da `kubeoptix-analyzer` o da un altro collector compatibile
 
 ## Installazione
 
@@ -127,7 +127,7 @@ Se `--locale` non viene specificato, il report viene generato in `pt-BR`.
 
 ### 1. Preparare o raccogliere gli artefatti
 
-Usa prima `kubeoptix-harvester` per esportare i dati del cluster, rimuovere i manifest `Secret` e anonimizzare il contenuto sensibile.
+Usa prima `kubeoptix-analyzer` per esportare i dati del cluster, rimuovere i manifest `Secret` e anonimizzare il contenuto sensibile.
 
 ### 2. Installare le dipendenze
 

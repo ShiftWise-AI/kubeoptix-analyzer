@@ -1,0 +1,94 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be exactly 1 for this release" }}
+{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "kubeoptix-analyzer.fullname" . }}
+  labels:
+    {{- include "kubeoptix-analyzer.labels" . | nindent 4 }}
+  {{- if .Values.buildConfig.enabled }}
+  annotations:
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"{{ default (include "kubeoptix-analyzer.fullname" .) .Values.buildConfig.output.imageStreamName }}:{{ default "latest" .Values.buildConfig.output.tag }}"},"fieldPath":"spec.template.spec.containers[?(@.name==\"analyzer\")].image"}]
+  {{- end }}
+spec:
+  serviceName: {{ include "kubeoptix-analyzer.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "kubeoptix-analyzer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubeoptix-analyzer.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "kubeoptix-analyzer.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: analyzer
+          image: "{{ include "kubeoptix-analyzer.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: KUBEOPTIX_MODE
+              value: {{ .Values.env.KUBEOPTIX_MODE | quote }}
+            - name: KUBEOPTIX_LOCALE
+              value: {{ .Values.env.KUBEOPTIX_LOCALE | quote }}
+            - name: KUBEOPTIX_API_HOST
+              value: {{ .Values.env.KUBEOPTIX_API_HOST | quote }}
+            - name: KUBEOPTIX_API_PORT
+              value: {{ .Values.env.KUBEOPTIX_API_PORT | quote }}
+          {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: app-data
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: app-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubeoptix-analyzer.pvcClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

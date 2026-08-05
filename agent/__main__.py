@@ -16,6 +16,19 @@ _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
 
+EMBEDDED_DISABLED_MSG = (
+    "Embedded mode is not available in container or OpenShift environments yet."
+)
+
+
+def _is_container_or_ocp() -> bool:
+    if os.getenv("KUBERNETES_SERVICE_HOST"):
+        return True
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        return True
+    return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="OpenShift assessment: local analysis, remote LLM, or local embedded AI."
@@ -66,6 +79,9 @@ def main() -> None:
         return
 
     if args.mode == "embedded":
+        if _is_container_or_ocp():
+            raise SystemExit(EMBEDDED_DISABLED_MSG)
+
         from agent.embedded_assess import run_embedded_assessment
 
         out = run_embedded_assessment(

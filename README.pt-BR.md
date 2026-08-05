@@ -8,12 +8,12 @@ Versões do documento: [English](README.md) | [Italiano](README.it.md)
 
 Este projeto é a etapa de análise do fluxo KubeOptix.
 
-- `kubeoptix-harvester` conecta em um cluster OpenShift em execução, coleta os artefatos, remove manifests `Secret` e anonimiza valores sensíveis.
+- `kubeoptix-analyzer` conecta em um cluster OpenShift em execução, coleta os artefatos, remove manifests `Secret` e anonimiza valores sensíveis.
 - `kubeoptix-analyzer` consome esses artefatos preparados e produz um relatório de assessment.
 
 O processo upstream de extração e tratamento de dados está documentado no README do harvester:
 
-- https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
+- https://github.com/ShiftWise-AI/kubeoptix-analyzer/blob/main/README.md
 
 De acordo com esse documento, o pipeline dos artefatos é:
 
@@ -28,7 +28,7 @@ Este analyzer assume que essas etapas já aconteceram antes do início da análi
 
 - Python 3.9+
 - Bash
-- Um diretório de artefatos gerado pelo `kubeoptix-harvester` ou por outro coletor compatível
+- Um diretório de artefatos gerado pelo `kubeoptix-analyzer` ou por outro coletor compatível
 
 ## Instalação
 
@@ -37,6 +37,57 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+```
+
+## Instalação Helm no OpenShift
+
+Este repositório agora inclui um chart Helm para deploy da API do analyzer no OpenShift:
+
+```text
+helm/kubeoptix-analyzer
+```
+
+Instalar ou atualizar:
+
+```bash
+helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
+  --namespace shiftwise-ai \
+  --create-namespace \
+  --set env.KUBEOPTIX_MODE=local
+```
+
+Observações:
+
+- Os relatórios são gravados em `/app/data/reports`.
+- Os artefatos de entrada são lidos de `/app/data/assessment`.
+- O chart força `replicaCount=1` e falha no render se configurado com qualquer outro valor.
+- O chart pode selecionar `storageClassName` automaticamente (`persistence.storageClassName=auto`): prioriza a classe padrão e, se não houver, usa a primeira classe disponível.
+- Se `persistence.existingClaim` for definido, o chart usa esse PVC diretamente e não cria um novo PVC.
+- A Route do OpenShift fica habilitada por padrão.
+- O chart cria `ImageStream` + `BuildConfig` do OpenShift por padrão.
+- Source Git padrão do BuildConfig: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
+- A autenticação do source usa a secret existente `github-auth`.
+
+Formato esperado da secret (já existente no namespace):
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-auth
+type: kubernetes.io/basic-auth
+stringData:
+  username: x-access-token
+  password: <github-token>
+```
+
+Se precisar criar:
+
+```bash
+oc -n shiftwise-ai create secret generic github-auth \
+  --type=kubernetes.io/basic-auth \
+  --from-literal=username='x-access-token' \
+  --from-literal=password='<github-token>'
 ```
 
 ## Layout de entrada suportado
@@ -127,7 +178,7 @@ Se `--locale` não for informado, o relatório será gerado em `pt-BR`.
 
 ### 1. Preparar ou coletar os artefatos
 
-Use o `kubeoptix-harvester` primeiro para exportar os dados do cluster, remover manifests `Secret` e anonimizar o conteúdo sensível.
+Use o `kubeoptix-analyzer` primeiro para exportar os dados do cluster, remover manifests `Secret` e anonimizar o conteúdo sensível.
 
 ### 2. Instalar dependências
 
@@ -164,6 +215,12 @@ Modo embedded:
 ./run.sh --artifacts ./artifacts --mode embedded
 ```
 
+Observação: em execução dentro de container ou OpenShift (OCP), `--mode embedded` é bloqueado e retorna a mensagem em inglês:
+
+```text
+Embedded mode is not available in container or OpenShift environments yet.
+```
+
 Locale customizado:
 
 ```bash
@@ -197,6 +254,7 @@ Caminho customizado do relatório:
 
 `embedded`
 
+- não disponível quando o analyzer está rodando em container ou em OpenShift (OCP)
 - executa primeiro a análise local determinística
 - calcula classificação heurística + reranking dos achados
 - agrupa erros de log repetidos por assinatura normalizada

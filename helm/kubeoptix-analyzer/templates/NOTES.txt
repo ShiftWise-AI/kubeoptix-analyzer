@@ -1,0 +1,11 @@
+1. Get the route URL:
+   export ROUTE_HOST=$(oc get route {{ include "kubeoptix-analyzer.fullname" . }} -o jsonpath='{.spec.host}')
+
+2. Check health endpoint:
+   curl -k -sS "https://${ROUTE_HOST}/health"
+
+3. Trigger analysis:
+   curl -k -sS -X POST "https://${ROUTE_HOST}/run" -H 'Content-Type: application/json' -d '{}'
+
+Reports are written to /app/data/reports inside the pod.
+Artifacts must be available under /app/data/assessment.

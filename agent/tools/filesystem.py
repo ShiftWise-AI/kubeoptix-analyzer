@@ -22,6 +22,31 @@ def build_filesystem_tools(
     artifacts_dir: Path,
     max_file_chars: int,
 ) -> list[FunctionTool]:
+    def _describe_ns(lines: list[str], ns_dir: Path) -> None:
+        """Append namespace content lines (apps, resources, worknodes)."""
+        apps_dir = ns_dir / "apps"
+        if apps_dir.is_dir():
+            for app in sorted(apps_dir.iterdir()):
+                if not app.is_dir():
+                    continue
+                resource_counts: list[str] = []
+                for sub in sorted(app.iterdir()):
+                    if sub.is_dir():
+                        n = sum(1 for _ in sub.rglob("*") if _.is_file())
+                        resource_counts.append(f"{sub.name}={n}")
+                detail = ", ".join(resource_counts) if resource_counts else "vazio"
+                lines.append(f"  app: {app.name} ({detail})")
+        resources_dir = ns_dir / "resources"
+        if resources_dir.is_dir():
+            for sub in sorted(resources_dir.iterdir()):
+                if sub.is_dir():
+                    n = sum(1 for _ in sub.rglob("*") if _.is_file())
+                    lines.append(f"  resources/{sub.name}: {n} arquivos")
+        worknodes_dir = ns_dir / "worknodes"
+        if worknodes_dir.is_dir():
+            n = len(list(worknodes_dir.glob("*.yaml")) + list(worknodes_dir.glob("*.yml")))
+            lines.append(f"  worknodes/: {n} arquivos (capacidade dos worker nodes)")
+
     def list_artifacts(path: str = ".") -> str:
         target = _safe_resolve(artifacts_dir, path)
         if not target.exists():
@@ -30,7 +55,14 @@ def build_filesystem_tools(
             return f"Arquivo: {path} ({target.stat().st_size} bytes)"
 
         lines: list[str] = []
-        # Structured inventory: namespaces -> apps.
+
+        # Single-namespace layout: the target dir itself has resources/ or apps/.
+        if (target / "resources").is_dir() or (target / "apps").is_dir():
+            lines.append(f"namespace: {target.name}")
+            _describe_ns(lines, target)
+            return "\n".join(lines)
+
+        # Multi-namespace layout: subdirs are namespaces.
         namespaces = sorted(
             p for p in target.iterdir() if p.is_dir() and not p.name.startswith(".")
         )
@@ -41,26 +73,17 @@ def build_filesystem_tools(
                 lines.append(f"{kind}\t{child.relative_to(artifacts_dir)}")
             return "\n".join(lines) or "(vazio)"
 
+        # Worknodes at the artifacts root (alongside namespaces).
+        worknodes_root = target / "worknodes"
+        if worknodes_root.is_dir():
+            n = len(list(worknodes_root.glob("*.yaml")) + list(worknodes_root.glob("*.yml")))
+            lines.append(f"worknodes/: {n} arquivos (capacidade dos worker nodes)")
+
         for ns in namespaces:
+            if ns.name == "worknodes":
+                continue  # already listed above
             lines.append(f"namespace: {ns.name}")
-            apps_dir = ns / "apps"
-            if apps_dir.is_dir():
-                for app in sorted(apps_dir.iterdir()):
-                    if not app.is_dir():
-                        continue
-                    resource_counts: list[str] = []
-                    for sub in sorted(app.iterdir()):
-                        if sub.is_dir():
-                            n = sum(1 for _ in sub.rglob("*") if _.is_file())
-                            resource_counts.append(f"{sub.name}={n}")
-                    detail = ", ".join(resource_counts) if resource_counts else "vazio"
-                    lines.append(f"  app: {app.name} ({detail})")
-            resources_dir = ns / "resources"
-            if resources_dir.is_dir():
-                for sub in sorted(resources_dir.iterdir()):
-                    if sub.is_dir():
-                        n = sum(1 for _ in sub.rglob("*") if _.is_file())
-                        lines.append(f"  resources/{sub.name}: {n} arquivos")
+            _describe_ns(lines, ns)
         return "\n".join(lines)
 
     def read_file(path: str, max_chars: int | None = None) -> str:

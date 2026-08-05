@@ -8,12 +8,12 @@ Language versions: [PT-BR](README.pt-BR.md) | [Italiano](README.it.md)
 
 This project is the analysis stage of the KubeOptix workflow.
 
-- `kubeoptix-harvester` connects to a live OpenShift cluster, collects artifacts, removes `Secret` manifests, and anonymizes sensitive values.
+- `kubeoptix-analyzer` connects to a live OpenShift cluster, collects artifacts, removes `Secret` manifests, and anonymizes sensitive values.
 - `kubeoptix-analyzer` consumes those prepared artifacts and produces an assessment report.
 
 The upstream extraction and data-treatment process is documented in the harvester README:
 
-- https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/main/README.md
+- https://github.com/ShiftWise-AI/kubeoptix-analyzer/blob/main/README.md
 
 According to that document, the artifact pipeline is:
 
@@ -28,7 +28,7 @@ This analyzer assumes those steps already happened before analysis starts.
 
 - Python 3.9+
 - Bash
-- An artifact directory produced by `kubeoptix-harvester` or another compatible collector
+- An artifact directory produced by `kubeoptix-analyzer` or another compatible collector
 
 ## Installation
 
@@ -37,6 +37,57 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+```
+
+## Helm install on OpenShift
+
+This repository now includes a Helm chart for deploying the analyzer API on OpenShift:
+
+```text
+helm/kubeoptix-analyzer
+```
+
+Install or upgrade:
+
+```bash
+helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
+  --namespace shiftwise-ai \
+  --create-namespace \
+  --set env.KUBEOPTIX_MODE=local
+```
+
+Notes:
+
+- Reports are written to `/app/data/reports`.
+- Input artifacts are read from `/app/data/assessment`.
+- The chart enforces `replicaCount=1` and fails rendering if set to any other value.
+- The chart can auto-select `storageClassName` (`persistence.storageClassName=auto`): it prefers the default class and falls back to the first available class.
+- If `persistence.existingClaim` is set, the chart uses that PVC directly and does not create a new PVC.
+- OpenShift Route is enabled by default.
+- The chart creates OpenShift `ImageStream` + `BuildConfig` by default.
+- Default BuildConfig Git source: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
+- Source authentication uses an existing secret named `github-auth`.
+
+Expected secret format (already available in your namespace):
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-auth
+type: kubernetes.io/basic-auth
+stringData:
+  username: x-access-token
+  password: <github-token>
+```
+
+If needed, create it with:
+
+```bash
+oc -n shiftwise-ai create secret generic github-auth \
+  --type=kubernetes.io/basic-auth \
+  --from-literal=username='x-access-token' \
+  --from-literal=password='<github-token>'
 ```
 
 ## Supported input layout
@@ -127,7 +178,7 @@ If `--locale` is omitted, the report is generated in `pt-BR`.
 
 ### 1. Prepare or collect artifacts
 
-Use `kubeoptix-harvester` first to export cluster data, remove `Secret` manifests, and anonymize sensitive content.
+Use `kubeoptix-analyzer` first to export cluster data, remove `Secret` manifests, and anonymize sensitive content.
 
 ### 2. Install dependencies
 

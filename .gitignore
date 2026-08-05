@@ -1,6 +1,7 @@
 .venv/
 .env
 .envapi
+.values.yaml
 __pycache__/
 *.pyc
 oc-health-artifacts-*/
