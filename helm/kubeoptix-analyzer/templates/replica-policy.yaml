@@ -2,9 +2,9 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: {{ include "kubeoptix-harvester.fullname" . }}-max-replicas
+  name: {{ include "kubeoptix-analyzer.fullname" . }}-max-replicas
   labels:
-    {{- include "kubeoptix-harvester.labels" . | nindent 4 }}
+    {{- include "kubeoptix-analyzer.labels" . | nindent 4 }}
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -15,7 +15,7 @@ spec:
         resources: ["statefulsets", "statefulsets/scale"]
   matchConditions:
     - name: target-workload
-      expression: request.namespace == '{{ include "kubeoptix-harvester.namespace" . }}' && request.name == '{{ include "kubeoptix-harvester.fullname" . }}'
+      expression: request.namespace == '{{ include "kubeoptix-analyzer.namespace" . }}' && request.name == '{{ include "kubeoptix-analyzer.fullname" . }}'
   validations:
     - expression: '!has(object.spec.replicas) || object.spec.replicas <= {{ .Values.scalePolicy.maxReplicas }}'
       message: 'Scaling is restricted. Maximum replicas allowed for this workload is {{ .Values.scalePolicy.maxReplicas }}.'
@@ -23,10 +23,10 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: {{ include "kubeoptix-harvester.fullname" . }}-max-replicas-binding
+  name: {{ include "kubeoptix-analyzer.fullname" . }}-max-replicas-binding
   labels:
-    {{- include "kubeoptix-harvester.labels" . | nindent 4 }}
+    {{- include "kubeoptix-analyzer.labels" . | nindent 4 }}
 spec:
-  policyName: {{ include "kubeoptix-harvester.fullname" . }}-max-replicas
+  policyName: {{ include "kubeoptix-analyzer.fullname" . }}-max-replicas
   validationActions: [Deny]
 {{- end }}

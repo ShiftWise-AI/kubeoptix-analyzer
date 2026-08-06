@@ -22,7 +22,7 @@ build:
     gitRef: feature/ocp
     contextDir: ""
   sourceSecret:
-    create: true
+    create: false
     name: "github-auth"
     username: ""
     token: ""
@@ -45,18 +45,18 @@ rbac:
 service:
   headless:
     enabled: true
-    name: harvester
-    port: 8000
+    name: analyzer
+    port: 8080
   api:
     enabled: true
-    name: harvester-api
+    name: analyzer-api
     type: ClusterIP
-    port: 8000
-    targetPort: 8000
+    port: 8080
+    targetPort: 8080
 
 route:
   enabled: true
-  name: harvester
+  name: analyzer
   host: ""
   termination: edge
   insecureEdgeTerminationPolicy: Redirect

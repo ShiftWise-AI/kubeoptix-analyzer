@@ -15,6 +15,16 @@ GIT_REF="${GIT_REF:-feature/ocp}"
 RESET="${RESET:-false}"
 WAIT_BUILD="${WAIT_BUILD:-true}"
 BUILD_FROM_LOCAL="${BUILD_FROM_LOCAL:-true}"
+ROUTE_NAME="${ROUTE_NAME:-}"
+
+read_route_name_from_values() {
+  local file="$1"
+  awk '
+    /^route:[[:space:]]*$/ { in_route=1; next }
+    in_route && /^[^[:space:]]/ { in_route=0 }
+    in_route && $1 == "name:" { print $2; exit }
+  ' "$file" | sed 's/^"\(.*\)"$/\1/'
+}
 
 usage() {
   echo "Usage: $0 -f <values-file>"
@@ -92,6 +102,7 @@ HELM_ARGS=(
   --set namespace.create=false
   --set namespace.name="$NS"
   --set build.enabled=true
+  --set build.sourceSecret.create=false
   --set build.source.gitUri="$GIT_URI"
   --set build.source.gitRef="$GIT_REF"
 )
@@ -134,7 +145,12 @@ echo "[INFO] Current resources:"
 oc get all -n "$NS"
 
 echo "[INFO] Route health test:"
-ROUTE_HOST="$(oc get route harvester -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
+if [[ -z "$ROUTE_NAME" ]]; then
+  ROUTE_NAME="$(read_route_name_from_values "$VALUES_FILE")"
+fi
+ROUTE_NAME="${ROUTE_NAME:-analyzer}"
+
+ROUTE_HOST="$(oc get route "$ROUTE_NAME" -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
 if [[ -n "$ROUTE_HOST" ]]; then
   echo "[INFO] URL: https://$ROUTE_HOST/health"
   curl -k --fail --show-error --silent "https://$ROUTE_HOST/health" || {
@@ -146,6 +162,6 @@ if [[ -n "$ROUTE_HOST" ]]; then
   echo
   echo "[INFO] Installation and health check completed successfully."
 else
-  echo "[WARN] Route 'harvester' not found in namespace $NS"
+  echo "[WARN] Route '$ROUTE_NAME' not found in namespace $NS"
   echo "[WARN] Verify route settings in values and chart templates."
 fi

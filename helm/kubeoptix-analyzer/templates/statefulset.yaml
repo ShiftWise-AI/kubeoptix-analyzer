@@ -2,27 +2,27 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "kubeoptix-harvester.fullname" . }}
-  namespace: {{ include "kubeoptix-harvester.namespace" . }}
+  name: {{ include "kubeoptix-analyzer.fullname" . }}
+  namespace: {{ include "kubeoptix-analyzer.namespace" . }}
   labels:
-    {{- include "kubeoptix-harvester.labels" . | nindent 4 }}
+    {{- include "kubeoptix-analyzer.labels" . | nindent 4 }}
 spec:
   serviceName: {{ .Values.service.headless.name }}
   # This workload is intentionally single-instance.
   replicas: 1
   selector:
     matchLabels:
-      {{- include "kubeoptix-harvester.selectorLabels" . | nindent 6 }}
+      {{- include "kubeoptix-analyzer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "kubeoptix-harvester.selectorLabels" . | nindent 8 }}
+        {{- include "kubeoptix-analyzer.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "kubeoptix-harvester.serviceAccountName" . }}
+      serviceAccountName: {{ include "kubeoptix-analyzer.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       containers:
-        - name: kubeoptix-harvester
-          image: "{{ include "kubeoptix-harvester.image" . }}"
+        - name: kubeoptix-analyzer
+          image: "{{ include "kubeoptix-analyzer.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- if .Values.startup.loginWithServiceAccount }}
           command:
