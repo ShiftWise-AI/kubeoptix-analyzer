@@ -3,3 +3,5 @@ curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
 	-d '{
 		"mode": "local"
 	}'
+
+curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports

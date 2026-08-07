@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,7 +16,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 ALLOWED_MODES = {"local", "llm", "embedded"}
 DEFAULT_ASSESSMENT_DIR = Path("data/assessment")
-DEFAULT_REPORTS_DIR = Path("data/reports")
+DEFAULT_REPORTS_DIR = Path("/app/data/reports")
 WORKNODES_DIRNAME = "worknodes"
 EMBEDDED_DISABLED_MSG = (
     "Embedded mode is not available in container or OpenShift environments yet."
@@ -82,6 +83,20 @@ def _resolve_reports_dir() -> Path:
     return DEFAULT_REPORTS_DIR.resolve()
 
 
+def _clear_reports_dir(reports_dir: Path) -> list[str]:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    deleted_entries: list[str] = []
+    for child in sorted(reports_dir.iterdir()):
+        deleted_entries.append(child.name)
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+            continue
+        child.unlink()
+
+    return deleted_entries
+
+
 def _list_namespace_dirs(assessment_dir: Path) -> list[Path]:
     if not assessment_dir.is_dir():
         raise ValueError(f"Assessment directory not found: {assessment_dir}")
@@ -143,6 +158,24 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._write_json(200, {"status": "ok"})
             return
         self._write_json(404, {"error": "not found"})
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/reports":
+            self._write_json(404, {"error": "not found"})
+            return
+
+        reports_dir = _resolve_reports_dir()
+        deleted_entries = _clear_reports_dir(reports_dir)
+        self._write_json(
+            200,
+            {
+                "status": "ok",
+                "reports_dir": str(reports_dir),
+                "deleted_count": len(deleted_entries),
+                "deleted_entries": deleted_entries,
+            },
+        )
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)

@@ -53,13 +53,15 @@ Instalar ou atualizar:
 helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
   --namespace shiftwise-ai \
   --create-namespace \
-  --set env.KUBEOPTIX_MODE=local
+  --set env.MODE=local
 ```
 
 Observações:
 
 - Os relatórios são gravados em `/app/data/reports`.
 - Os artefatos de entrada são lidos de `/app/data/assessment`.
+- A API aceita `POST /run` com um body JSON contendo apenas `mode`.
+- A API expõe `DELETE /reports` para limpar o conteúdo de `/app/data/reports`.
 - O chart força `replicaCount=1` e falha no render se configurado com qualquer outro valor.
 - O chart pode selecionar `storageClassName` automaticamente (`persistence.storageClassName=auto`): prioriza a classe padrão e, se não houver, usa a primeira classe disponível.
 - Se `persistence.existingClaim` for definido, o chart usa esse PVC diretamente e não cria um novo PVC.
@@ -67,6 +69,8 @@ Observações:
 - O chart cria `ImageStream` + `BuildConfig` do OpenShift por padrão.
 - Source Git padrão do BuildConfig: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
 - A autenticação do source usa a secret existente `github-auth`.
+- As credenciais de runtime do analyzer ficam em `secretEnv`. Por padrão o chart cria uma secret com `CURSOR_API_KEY`, `CURSOR_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL` e `LLM_MODEL`.
+- Para reutilizar uma secret existente nas credenciais do analyzer, configure `secretEnv.create=false` e `secretEnv.name=<nome-da-secret>`.
 
 Formato esperado da secret (já existente no namespace):
 
@@ -88,6 +92,29 @@ oc -n shiftwise-ai create secret generic github-auth \
   --type=kubernetes.io/basic-auth \
   --from-literal=username='x-access-token' \
   --from-literal=password='<github-token>'
+```
+
+## Uso da API
+
+A API usa os diretórios fixos do runtime:
+
+- `/app/data/assessment`
+- `/app/data/reports`
+
+Executar a análise:
+
+```bash
+curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "local"
+  }'
+```
+
+Limpar a pasta de relatórios:
+
+```bash
+curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
 ```
 
 ## Layout de entrada suportado

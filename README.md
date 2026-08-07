@@ -53,13 +53,15 @@ Install or upgrade:
 helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
   --namespace shiftwise-ai \
   --create-namespace \
-  --set env.KUBEOPTIX_MODE=local
+  --set env.MODE=local
 ```
 
 Notes:
 
 - Reports are written to `/app/data/reports`.
 - Input artifacts are read from `/app/data/assessment`.
+- The API accepts `POST /run` with a JSON body containing only `mode`.
+- The API exposes `DELETE /reports` to clear the contents of `/app/data/reports`.
 - The chart enforces `replicaCount=1` and fails rendering if set to any other value.
 - The chart can auto-select `storageClassName` (`persistence.storageClassName=auto`): it prefers the default class and falls back to the first available class.
 - If `persistence.existingClaim` is set, the chart uses that PVC directly and does not create a new PVC.
@@ -67,6 +69,8 @@ Notes:
 - The chart creates OpenShift `ImageStream` + `BuildConfig` by default.
 - Default BuildConfig Git source: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
 - Source authentication uses an existing secret named `github-auth`.
+- Analyzer runtime credentials are configured in `secretEnv`. By default the chart creates a secret with `CURSOR_API_KEY`, `CURSOR_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`.
+- To reuse an existing secret for analyzer credentials, set `secretEnv.create=false` and `secretEnv.name=<secret-name>`.
 
 Expected secret format (already available in your namespace):
 
@@ -88,6 +92,29 @@ oc -n shiftwise-ai create secret generic github-auth \
   --type=kubernetes.io/basic-auth \
   --from-literal=username='x-access-token' \
   --from-literal=password='<github-token>'
+```
+
+## API usage
+
+The API uses the fixed runtime directories:
+
+- `/app/data/assessment`
+- `/app/data/reports`
+
+Run the analysis:
+
+```bash
+curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "local"
+  }'
+```
+
+Clear the reports directory:
+
+```bash
+curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
 ```
 
 ## Supported input layout

@@ -39,6 +39,29 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+## Uso API
+
+L'API usa directory runtime fisse:
+
+- `/app/data/assessment`
+- `/app/data/reports`
+
+Eseguire l'analisi:
+
+```bash
+curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "local"
+  }'
+```
+
+Pulire la directory dei report:
+
+```bash
+curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
+```
+
 ## Layout di input supportato
 
 L'analyzer supporta entrambi i layout seguenti.
