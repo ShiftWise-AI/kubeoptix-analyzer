@@ -38,9 +38,20 @@ podEnv:
   HOME: /tmp
   KUBECONFIG: /tmp/kubeconfig
 
-rbac:
-  createClusterRoleBinding: true
-  clusterRoleName: cluster-reader
+env:
+  MODE: ""
+  TZ: UTC
+  ENV: ""
+
+secretEnv:
+  create: true
+  name: ""
+  cursorApiKey: ""
+  cursorModel: composer-2.5
+  llmApiKey: ""
+  llmBaseUrl: https://api.openai.com/v1
+  llmModel: gpt-4o-mini
+
 
 service:
   headless:

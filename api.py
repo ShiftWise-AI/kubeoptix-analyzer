@@ -14,11 +14,17 @@ ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
 
 ALLOWED_MODES = {"local", "llm", "embedded"}
-DEFAULT_ASSESSMENT_DIR = Path("/app/data/assessment")
-DEFAULT_REPORTS_DIR = Path("/app/data/reports")
+DEFAULT_ASSESSMENT_DIR = Path("data/assessment")
+DEFAULT_REPORTS_DIR = Path("data/reports")
 WORKNODES_DIRNAME = "worknodes"
 EMBEDDED_DISABLED_MSG = (
     "Embedded mode is not available in container or OpenShift environments yet."
+)
+OPENSHIFT_LLM_DISABLED_MSG = (
+    "LLM mode is not available when ENV is set to 'openshift'."
+)
+INVALID_MODE_MSG = (
+    "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
 )
 
 
@@ -47,15 +53,17 @@ def _build_command(mode: str, namespace_dir: Path, report_file: Path) -> list[st
     return command
 
 
-def _resolve_mode() -> str:
-    mode = os.getenv("KUBEOPTIX_MODE", "").strip().lower()
+def _resolve_mode(mode_value: object) -> str:
+    mode = str(mode_value or "").strip().lower()
     if not mode:
-        raise ValueError("KUBEOPTIX_MODE is required")
+        raise ValueError(INVALID_MODE_MSG)
     if mode not in ALLOWED_MODES:
-        raise ValueError(
-            f"Invalid KUBEOPTIX_MODE '{mode}'. Allowed values: {', '.join(sorted(ALLOWED_MODES))}"
-        )
+        raise ValueError(INVALID_MODE_MSG)
     return mode
+
+
+def _is_openshift_env() -> bool:
+    return os.getenv("ENV", "").strip().lower() == "openshift"
 
 
 def _is_container_or_ocp() -> bool:
@@ -95,10 +103,24 @@ def _list_namespace_dirs(assessment_dir: Path) -> list[Path]:
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    def _discard_request_body(self) -> None:
+    def _read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
-        if content_length > 0:
-            self.rfile.read(content_length)
+        if content_length <= 0:
+            return {}
+
+        raw_body = self.rfile.read(content_length)
+        if not raw_body:
+            return {}
+
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Request body must be valid JSON.") from exc
+
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+
+        return payload
 
     def _write_json(self, status_code: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
@@ -127,10 +149,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         if parsed.path != "/run":
             self._write_json(404, {"error": "not found"})
             return
-        self._discard_request_body()
 
         try:
-            mode = _resolve_mode()
+            request_payload = self._read_json_body()
+            mode = _resolve_mode(request_payload.get("mode"))
+            if mode == "llm" and _is_openshift_env():
+                raise ValueError(OPENSHIFT_LLM_DISABLED_MSG)
             if mode == "embedded" and _is_container_or_ocp():
                 raise ValueError(EMBEDDED_DISABLED_MSG)
             assessment_dir = _resolve_assessment_dir()

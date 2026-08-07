@@ -18,10 +18,10 @@ spec:
       labels:
         {{- include "kubeoptix-analyzer.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "kubeoptix-analyzer.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       containers:
         - name: kubeoptix-analyzer
+          {{- $probes := .Values.probes | default dict }}
+          {{- $secretEnv := .Values.secretEnv | default dict }}
           image: "{{ include "kubeoptix-analyzer.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- if .Values.startup.loginWithServiceAccount }}
@@ -37,35 +37,44 @@ spec:
               value: {{ .Values.podEnv.HOME | quote }}
             - name: KUBECONFIG
               value: {{ .Values.podEnv.KUBECONFIG | quote }}
+            {{- range $name, $value := (.Values.env | default dict) }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- if or ($secretEnv.create | default false) $secretEnv.name }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kubeoptix-analyzer.secretEnvName" . }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.api.targetPort }}
               protocol: TCP
-          {{- if .Values.probes.enabled }}
+          {{- if ($probes.enabled | default false) }}
           startupProbe:
             httpGet:
-              path: {{ .Values.probes.path }}
+              path: {{ $probes.path }}
               port: http
-            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            initialDelaySeconds: {{ $probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ $probes.startup.periodSeconds }}
+            timeoutSeconds: {{ $probes.startup.timeoutSeconds }}
+            failureThreshold: {{ $probes.startup.failureThreshold }}
           readinessProbe:
             httpGet:
-              path: {{ .Values.probes.path }}
+              path: {{ $probes.path }}
               port: http
-            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            initialDelaySeconds: {{ $probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ $probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ $probes.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
-              path: {{ .Values.probes.path }}
+              path: {{ $probes.path }}
               port: http
-            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            initialDelaySeconds: {{ $probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ $probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ $probes.liveness.failureThreshold }}
           {{- end }}
           {{- if .Values.persistence.enabled }}
           volumeMounts:

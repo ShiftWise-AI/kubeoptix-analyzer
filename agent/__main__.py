@@ -19,6 +19,9 @@ load_dotenv(_ROOT / ".env")
 EMBEDDED_DISABLED_MSG = (
     "Embedded mode is not available in container or OpenShift environments yet."
 )
+OPENSHIFT_LLM_DISABLED_MSG = (
+    "LLM mode is not available when ENV is set to 'openshift'."
+)
 
 
 def _is_container_or_ocp() -> bool:
@@ -27,6 +30,10 @@ def _is_container_or_ocp() -> bool:
     if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
         return True
     return False
+
+
+def _is_openshift_env() -> bool:
+    return os.getenv("ENV", "").strip().lower() == "openshift"
 
 
 def main() -> None:
@@ -92,6 +99,9 @@ def main() -> None:
         )
         print(f"[agent] Report written to: {out}")
         return
+
+    if args.mode == "llm" and _is_openshift_env():
+        raise SystemExit(OPENSHIFT_LLM_DISABLED_MSG)
 
     validate_llm_env()
 

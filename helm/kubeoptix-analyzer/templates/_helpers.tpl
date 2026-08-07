@@ -28,14 +28,6 @@ app.kubernetes.io/name: {{ include "kubeoptix-analyzer.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "kubeoptix-analyzer.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create -}}
-{{- default (printf "%s-user" (include "kubeoptix-analyzer.fullname" .)) .Values.serviceAccount.name -}}
-{{- else -}}
-{{- default "default" .Values.serviceAccount.name -}}
-{{- end -}}
-{{- end -}}
-
 {{- define "kubeoptix-analyzer.namespace" -}}
 {{- default .Release.Namespace .Values.namespace.name -}}
 {{- end -}}
@@ -46,5 +38,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else -}}
 {{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "kubeoptix-analyzer.secretEnvName" -}}
+{{- default (printf "%s-env" (include "kubeoptix-analyzer.fullname" .)) .Values.secretEnv.name -}}
 {{- end -}}
 
