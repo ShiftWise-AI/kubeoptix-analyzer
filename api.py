@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,9 @@ OPENSHIFT_LLM_DISABLED_MSG = (
 )
 INVALID_MODE_MSG = (
     "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
+)
+INVALID_NAMESPACES_MSG = (
+    "Request body must include 'namespaces' with one or more namespace names."
 )
 
 
@@ -82,6 +86,34 @@ def _resolve_mode(mode_value: object) -> str:
     if mode not in ALLOWED_MODES:
         raise ValueError(INVALID_MODE_MSG)
     return mode
+
+
+def _resolve_namespaces(namespaces_value: object) -> list[str]:
+    if isinstance(namespaces_value, str):
+        items = [item.strip() for item in namespaces_value.split(",")]
+    elif isinstance(namespaces_value, list):
+        items = [str(item).strip() for item in namespaces_value]
+    else:
+        raise ValueError(INVALID_NAMESPACES_MSG)
+
+    names = [item for item in items if item]
+    if not names:
+        raise ValueError(INVALID_NAMESPACES_MSG)
+
+    # Preserve order and remove duplicates.
+    return list(dict.fromkeys(names))
+
+
+def _select_namespace_dirs(namespace_dirs: list[Path], namespace_names: list[str]) -> list[Path]:
+    by_name = {ns_dir.name: ns_dir for ns_dir in namespace_dirs}
+    missing = [name for name in namespace_names if name not in by_name]
+    if missing:
+        available = ", ".join(sorted(by_name))
+        missing_list = ", ".join(missing)
+        raise ValueError(
+            f"Namespaces not found: {missing_list}. Available namespaces: {available}"
+        )
+    return [by_name[name] for name in namespace_names]
 
 
 def _is_openshift_env() -> bool:
@@ -173,6 +205,27 @@ def _set_phase(
         _STATUS.updated_at = now
 
 
+def _compute_next_progress(
+    current_progress: int,
+    start_progress: int,
+    end_progress: int,
+    elapsed_s: float,
+    phase_window_s: float,
+) -> int:
+    if end_progress <= start_progress:
+        return current_progress
+
+    fraction = min(0.95, elapsed_s / phase_window_s)
+    target_progress = start_progress + int((end_progress - start_progress) * fraction)
+    target_progress = max(start_progress, min(end_progress, target_progress))
+
+    if target_progress <= current_progress:
+        return current_progress
+
+    # Move in smaller steps so the status feels smoother and less abrupt.
+    return min(target_progress, current_progress + 1)
+
+
 def _progress_worker(stop_event: threading.Event) -> None:
     while not stop_event.wait(0.5):
         with _STATUS_LOCK:
@@ -184,16 +237,17 @@ def _progress_worker(stop_event: threading.Event) -> None:
             phase_window_s = _STATUS.phase_window_s
             current_progress = _STATUS.progress
 
-        if end_progress <= start_progress:
-            continue
-
         elapsed = max(0.0, time.monotonic() - phase_started_at)
-        fraction = min(0.95, elapsed / phase_window_s)
-        target_progress = start_progress + int((end_progress - start_progress) * fraction)
-        target_progress = max(start_progress, min(end_progress, target_progress))
+        next_progress = _compute_next_progress(
+            current_progress=current_progress,
+            start_progress=start_progress,
+            end_progress=end_progress,
+            elapsed_s=elapsed,
+            phase_window_s=phase_window_s,
+        )
 
-        if target_progress > current_progress:
-            _update_status(progress=target_progress)
+        if next_progress > current_progress:
+            _update_status(progress=next_progress)
 
 
 def _start_progress_tracking() -> None:
@@ -235,6 +289,57 @@ def _list_namespace_dirs(assessment_dir: Path) -> list[Path]:
         )
 
     return namespaces
+
+
+def _list_assessment_folder_names(assessment_dir: Path) -> list[str]:
+    if not assessment_dir.is_dir():
+        raise ValueError(f"Assessment directory not found: {assessment_dir}")
+
+    folder_names: list[str] = []
+    for child in sorted(assessment_dir.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if child.name == WORKNODES_DIRNAME:
+            continue
+        folder_names.append(child.name)
+
+    return folder_names
+
+
+def _report_suffix_for_mode(mode: str) -> str:
+    if mode == "local":
+        return "-local"
+    if mode == "llm":
+        return "-llm"
+    return ""
+
+
+def _resolve_file_created_at(path: Path) -> datetime:
+    stat_result = path.stat()
+    created_ts = getattr(stat_result, "st_birthtime", None)
+    if created_ts is None:
+        # Linux usually does not expose birth time; ctime is the best available fallback.
+        created_ts = stat_result.st_ctime
+    return datetime.fromtimestamp(created_ts).astimezone()
+
+
+def _list_report_files_with_dates(reports_dir: Path) -> list[dict[str, str]]:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    files: list[dict[str, str]] = []
+    for child in sorted(reports_dir.iterdir()):
+        if not child.is_file() or child.name.startswith("."):
+            continue
+        created_at = _resolve_file_created_at(child)
+        files.append(
+            {
+                "name": child.name,
+                "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S %z"),
+                "created_at_iso": created_at.isoformat(),
+            }
+        )
+
+    return files
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -288,6 +393,35 @@ class ApiHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/status", "/analysis/status"}:
             self._write_text(200, f"{_snapshot_progress()}\n")
             return
+        if parsed.path in {"/reports", "/reports/files"}:
+            reports_dir = _resolve_reports_dir()
+            files = _list_report_files_with_dates(reports_dir)
+            self._write_json(
+                200,
+                {
+                    "reports_dir": str(reports_dir),
+                    "count": len(files),
+                    "files": files,
+                },
+            )
+            return
+        if parsed.path in {"/assessment/folders", "/assessment/namespaces"}:
+            try:
+                assessment_dir = _resolve_assessment_dir()
+                folder_names = _list_assessment_folder_names(assessment_dir)
+            except ValueError as exc:
+                self._write_json(500, {"error": str(exc)})
+                return
+
+            self._write_json(
+                200,
+                {
+                    "assessment_dir": str(assessment_dir),
+                    "count": len(folder_names),
+                    "folders": folder_names,
+                },
+            )
+            return
         self._write_json(404, {"error": "not found"})
 
     def do_DELETE(self) -> None:
@@ -316,14 +450,24 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         try:
             request_payload = self._read_json_body()
-            mode = _resolve_mode(request_payload.get("mode"))
+            mode_value = request_payload.get("mode", request_payload.get("--mode"))
+            namespaces_value = request_payload.get(
+                "namespaces",
+                request_payload.get("--namespaces"),
+            )
+
+            mode = _resolve_mode(mode_value)
+            namespace_names = _resolve_namespaces(namespaces_value)
+
             if mode == "llm" and _is_openshift_env():
                 raise ValueError(OPENSHIFT_LLM_DISABLED_MSG)
             if mode == "embedded" and _is_container_or_ocp():
                 raise ValueError(EMBEDDED_DISABLED_MSG)
+
             assessment_dir = _resolve_assessment_dir()
             reports_dir = _resolve_reports_dir()
-            namespace_dirs = _list_namespace_dirs(assessment_dir)
+            all_namespace_dirs = _list_namespace_dirs(assessment_dir)
+            namespace_dirs = _select_namespace_dirs(all_namespace_dirs, namespace_names)
         except ValueError as exc:
             self._write_json(
                 500,
@@ -372,7 +516,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             for index, namespace_dir in enumerate(namespace_dirs):
                 namespace_span = per_namespace + (1 if index < remainder else 0)
                 namespace_end = current_start + namespace_span
-                report_file = reports_dir / f"{namespace_dir.name}.md"
+                report_suffix = _report_suffix_for_mode(mode)
+                report_file = reports_dir / f"{namespace_dir.name}{report_suffix}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
 
                 command = _build_command(mode, namespace_dir, report_file)
@@ -447,6 +592,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
             payload = {
                 "mode": mode,
+                "namespaces": [ns.name for ns in namespace_dirs],
                 "assessment_dir": str(assessment_dir),
                 "reports_dir": str(reports_dir),
                 "worknodes_dir": str((assessment_dir / WORKNODES_DIRNAME).resolve()),
