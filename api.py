@@ -205,6 +205,27 @@ def _set_phase(
         _STATUS.updated_at = now
 
 
+def _compute_next_progress(
+    current_progress: int,
+    start_progress: int,
+    end_progress: int,
+    elapsed_s: float,
+    phase_window_s: float,
+) -> int:
+    if end_progress <= start_progress:
+        return current_progress
+
+    fraction = min(0.95, elapsed_s / phase_window_s)
+    target_progress = start_progress + int((end_progress - start_progress) * fraction)
+    target_progress = max(start_progress, min(end_progress, target_progress))
+
+    if target_progress <= current_progress:
+        return current_progress
+
+    # Move in smaller steps so the status feels smoother and less abrupt.
+    return min(target_progress, current_progress + 1)
+
+
 def _progress_worker(stop_event: threading.Event) -> None:
     while not stop_event.wait(0.5):
         with _STATUS_LOCK:
@@ -216,16 +237,17 @@ def _progress_worker(stop_event: threading.Event) -> None:
             phase_window_s = _STATUS.phase_window_s
             current_progress = _STATUS.progress
 
-        if end_progress <= start_progress:
-            continue
-
         elapsed = max(0.0, time.monotonic() - phase_started_at)
-        fraction = min(0.95, elapsed / phase_window_s)
-        target_progress = start_progress + int((end_progress - start_progress) * fraction)
-        target_progress = max(start_progress, min(end_progress, target_progress))
+        next_progress = _compute_next_progress(
+            current_progress=current_progress,
+            start_progress=start_progress,
+            end_progress=end_progress,
+            elapsed_s=elapsed,
+            phase_window_s=phase_window_s,
+        )
 
-        if target_progress > current_progress:
-            _update_status(progress=target_progress)
+        if next_progress > current_progress:
+            _update_status(progress=next_progress)
 
 
 def _start_progress_tracking() -> None:
