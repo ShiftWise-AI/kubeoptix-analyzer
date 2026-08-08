@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -260,6 +261,34 @@ def _report_suffix_for_mode(mode: str) -> str:
     return ""
 
 
+def _resolve_file_created_at(path: Path) -> datetime:
+    stat_result = path.stat()
+    created_ts = getattr(stat_result, "st_birthtime", None)
+    if created_ts is None:
+        # Linux usually does not expose birth time; ctime is the best available fallback.
+        created_ts = stat_result.st_ctime
+    return datetime.fromtimestamp(created_ts).astimezone()
+
+
+def _list_report_files_with_dates(reports_dir: Path) -> list[dict[str, str]]:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    files: list[dict[str, str]] = []
+    for child in sorted(reports_dir.iterdir()):
+        if not child.is_file() or child.name.startswith("."):
+            continue
+        created_at = _resolve_file_created_at(child)
+        files.append(
+            {
+                "name": child.name,
+                "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S %z"),
+                "created_at_iso": created_at.isoformat(),
+            }
+        )
+
+    return files
+
+
 class ApiHandler(BaseHTTPRequestHandler):
     def _read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -310,6 +339,18 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if parsed.path in {"/status", "/analysis/status"}:
             self._write_text(200, f"{_snapshot_progress()}\n")
+            return
+        if parsed.path in {"/reports", "/reports/files"}:
+            reports_dir = _resolve_reports_dir()
+            files = _list_report_files_with_dates(reports_dir)
+            self._write_json(
+                200,
+                {
+                    "reports_dir": str(reports_dir),
+                    "count": len(files),
+                    "files": files,
+                },
+            )
             return
         if parsed.path in {"/assessment/folders", "/assessment/namespaces"}:
             try:
