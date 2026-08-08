@@ -31,6 +31,9 @@ OPENSHIFT_LLM_DISABLED_MSG = (
 INVALID_MODE_MSG = (
     "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
 )
+INVALID_NAMESPACES_MSG = (
+    "Request body must include 'namespaces' with one or more namespace names."
+)
 
 
 @dataclass
@@ -83,6 +86,34 @@ def _resolve_mode(mode_value: object) -> str:
     if mode not in ALLOWED_MODES:
         raise ValueError(INVALID_MODE_MSG)
     return mode
+
+
+def _resolve_namespaces(namespaces_value: object) -> list[str]:
+    if isinstance(namespaces_value, str):
+        items = [item.strip() for item in namespaces_value.split(",")]
+    elif isinstance(namespaces_value, list):
+        items = [str(item).strip() for item in namespaces_value]
+    else:
+        raise ValueError(INVALID_NAMESPACES_MSG)
+
+    names = [item for item in items if item]
+    if not names:
+        raise ValueError(INVALID_NAMESPACES_MSG)
+
+    # Preserve order and remove duplicates.
+    return list(dict.fromkeys(names))
+
+
+def _select_namespace_dirs(namespace_dirs: list[Path], namespace_names: list[str]) -> list[Path]:
+    by_name = {ns_dir.name: ns_dir for ns_dir in namespace_dirs}
+    missing = [name for name in namespace_names if name not in by_name]
+    if missing:
+        available = ", ".join(sorted(by_name))
+        missing_list = ", ".join(missing)
+        raise ValueError(
+            f"Namespaces not found: {missing_list}. Available namespaces: {available}"
+        )
+    return [by_name[name] for name in namespace_names]
 
 
 def _is_openshift_env() -> bool:
@@ -397,14 +428,24 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         try:
             request_payload = self._read_json_body()
-            mode = _resolve_mode(request_payload.get("mode"))
+            mode_value = request_payload.get("mode", request_payload.get("--mode"))
+            namespaces_value = request_payload.get(
+                "namespaces",
+                request_payload.get("--namespaces"),
+            )
+
+            mode = _resolve_mode(mode_value)
+            namespace_names = _resolve_namespaces(namespaces_value)
+
             if mode == "llm" and _is_openshift_env():
                 raise ValueError(OPENSHIFT_LLM_DISABLED_MSG)
             if mode == "embedded" and _is_container_or_ocp():
                 raise ValueError(EMBEDDED_DISABLED_MSG)
+
             assessment_dir = _resolve_assessment_dir()
             reports_dir = _resolve_reports_dir()
-            namespace_dirs = _list_namespace_dirs(assessment_dir)
+            all_namespace_dirs = _list_namespace_dirs(assessment_dir)
+            namespace_dirs = _select_namespace_dirs(all_namespace_dirs, namespace_names)
         except ValueError as exc:
             self._write_json(
                 500,
@@ -529,6 +570,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
             payload = {
                 "mode": mode,
+                "namespaces": [ns.name for ns in namespace_dirs],
                 "assessment_dir": str(assessment_dir),
                 "reports_dir": str(reports_dir),
                 "worknodes_dir": str((assessment_dir / WORKNODES_DIRNAME).resolve()),

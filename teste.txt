@@ -1,12 +1,54 @@
-curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
+# Base URL
+API_URL="https://analyzer-shiftwise-ai.apps-crc.testing"
+
+# Health
+curl -s -k "$API_URL/health"
+
+# Status (progress)
+curl -s -k "$API_URL/status"
+curl -s -k "$API_URL/analysis/status"
+watch -n 1 'curl -s -k https://analyzer-shiftwise-ai.apps-crc.testing/status'
+
+# Assessment folders (worknodes is ignored)
+curl -s -k "$API_URL/assessment/folders"
+curl -s -k "$API_URL/assessment/namespaces"
+
+# Run analysis - local mode
+curl -k -X POST "$API_URL/run" \
 	-H "Content-Type: application/json" \
 	-d '{
-		"mode": "local"
+		"mode": "local",
+		"namespaces": ["openshift-console"]
 	}'
 
-curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
+# Run analysis - llm mode
+curl -k -X POST "$API_URL/run" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"mode": "llm",
+		"namespaces": ["openshift-console", "openshift-authentication"]
+	}'
 
-curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
+# Run analysis - embedded mode
+curl -k -X POST "$API_URL/run" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"mode": "embedded",
+		"namespaces": ["openshift-console"]
+	}'
 
+# Run analysis - payload using --mode/--namespaces keys
+curl -k -X POST "$API_URL/run" \
+	-H "Content-Type: application/json" \
+	-d '{
+		"--mode": "local",
+		"--namespaces": ["openshift-console"]
+	}'
 
-watch -n 1 'curl -s -k https://analyzer-shiftwise-ai.apps-crc.testing/status'
+# Reports list
+curl -s -k "$API_URL/reports"
+curl -s -k "$API_URL/reports/files"
+
+# Delete all reports
+curl -k -X DELETE "$API_URL/reports"
+
