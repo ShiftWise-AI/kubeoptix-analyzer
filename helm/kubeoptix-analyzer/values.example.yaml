@@ -39,9 +39,9 @@ podEnv:
   KUBECONFIG: /tmp/kubeconfig
 
 env:
-  MODE: ""
-  TZ: UTC
+  TZ: ""
   ENV: ""
+
 
 secretEnv:
   create: true
