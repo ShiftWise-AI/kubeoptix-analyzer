@@ -237,6 +237,21 @@ def _list_namespace_dirs(assessment_dir: Path) -> list[Path]:
     return namespaces
 
 
+def _list_assessment_folder_names(assessment_dir: Path) -> list[str]:
+    if not assessment_dir.is_dir():
+        raise ValueError(f"Assessment directory not found: {assessment_dir}")
+
+    folder_names: list[str] = []
+    for child in sorted(assessment_dir.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if child.name == WORKNODES_DIRNAME:
+            continue
+        folder_names.append(child.name)
+
+    return folder_names
+
+
 class ApiHandler(BaseHTTPRequestHandler):
     def _read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -287,6 +302,23 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if parsed.path in {"/status", "/analysis/status"}:
             self._write_text(200, f"{_snapshot_progress()}\n")
+            return
+        if parsed.path in {"/assessment/folders", "/assessment/namespaces"}:
+            try:
+                assessment_dir = _resolve_assessment_dir()
+                folder_names = _list_assessment_folder_names(assessment_dir)
+            except ValueError as exc:
+                self._write_json(500, {"error": str(exc)})
+                return
+
+            self._write_json(
+                200,
+                {
+                    "assessment_dir": str(assessment_dir),
+                    "count": len(folder_names),
+                    "folders": folder_names,
+                },
+            )
             return
         self._write_json(404, {"error": "not found"})
 

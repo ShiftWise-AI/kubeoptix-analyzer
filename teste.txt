@@ -5,3 +5,8 @@ curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
 	}'
 
 curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
+
+curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
+
+
+watch -n 1 'curl -s -k https://analyzer-shiftwise-ai.apps-crc.testing/status'
