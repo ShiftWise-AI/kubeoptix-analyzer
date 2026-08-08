@@ -60,7 +60,7 @@ Notes:
 
 - Reports are written to `/app/data/reports`.
 - Input artifacts are read from `/app/data/assessment`.
-- The API accepts `POST /run` with a JSON body containing only `mode`.
+- The API accepts `POST /run` with a JSON body containing `mode` and one or more `namespaces`.
 - The API exposes `GET /status` with plain-text progress from `0` to `100`.
 - The API exposes `DELETE /reports` to clear the contents of `/app/data/reports`.
 - The chart enforces `replicaCount=1` and fails rendering if set to any other value.
@@ -108,7 +108,8 @@ Run the analysis:
 curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
   -H "Content-Type: application/json" \
   -d '{
-    "mode": "local"
+    "mode": "local",
+    "namespaces": ["openshift-console"]
   }'
 ```
 

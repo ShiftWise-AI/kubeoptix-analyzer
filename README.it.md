@@ -52,7 +52,8 @@ Eseguire l'analisi:
 curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
   -H "Content-Type: application/json" \
   -d '{
-    "mode": "local"
+    "mode": "local",
+    "namespaces": ["openshift-console"]
   }'
 ```
 
