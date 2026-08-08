@@ -4,7 +4,10 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -27,6 +30,24 @@ OPENSHIFT_LLM_DISABLED_MSG = (
 INVALID_MODE_MSG = (
     "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
 )
+
+
+@dataclass
+class ExecutionStatus:
+    progress: int = 0
+    running: bool = False
+    phase: str = "idle"
+    phase_start_progress: int = 0
+    phase_end_progress: int = 0
+    phase_started_at: float = 0.0
+    phase_window_s: float = 1.0
+    updated_at: float = field(default_factory=time.monotonic)
+
+
+_STATUS_LOCK = threading.Lock()
+_STATUS = ExecutionStatus()
+_STATUS_STOP_EVENT: threading.Event | None = None
+_STATUS_WORKER: threading.Thread | None = None
 
 
 def _build_command(mode: str, namespace_dir: Path, report_file: Path) -> list[str]:
@@ -97,6 +118,105 @@ def _clear_reports_dir(reports_dir: Path) -> list[str]:
     return deleted_entries
 
 
+def _clamp_progress(value: int) -> int:
+    return max(0, min(100, value))
+
+
+def _snapshot_progress() -> int:
+    with _STATUS_LOCK:
+        return _STATUS.progress
+
+
+def _update_status(
+    *,
+    progress: int | None = None,
+    running: bool | None = None,
+    phase: str | None = None,
+    phase_start_progress: int | None = None,
+    phase_end_progress: int | None = None,
+    phase_started_at: float | None = None,
+    phase_window_s: float | None = None,
+) -> None:
+    with _STATUS_LOCK:
+        if progress is not None:
+            _STATUS.progress = _clamp_progress(progress)
+        if running is not None:
+            _STATUS.running = running
+        if phase is not None:
+            _STATUS.phase = phase
+        if phase_start_progress is not None:
+            _STATUS.phase_start_progress = _clamp_progress(phase_start_progress)
+        if phase_end_progress is not None:
+            _STATUS.phase_end_progress = _clamp_progress(phase_end_progress)
+        if phase_started_at is not None:
+            _STATUS.phase_started_at = phase_started_at
+        if phase_window_s is not None:
+            _STATUS.phase_window_s = max(0.1, phase_window_s)
+        _STATUS.updated_at = time.monotonic()
+
+
+def _set_phase(
+    phase: str,
+    start_progress: int,
+    end_progress: int,
+    window_s: float,
+) -> None:
+    now = time.monotonic()
+    with _STATUS_LOCK:
+        _STATUS.phase = phase
+        _STATUS.phase_start_progress = _clamp_progress(start_progress)
+        _STATUS.phase_end_progress = _clamp_progress(end_progress)
+        _STATUS.phase_started_at = now
+        _STATUS.phase_window_s = max(0.1, window_s)
+        _STATUS.progress = max(_STATUS.progress, _STATUS.phase_start_progress)
+        _STATUS.running = True
+        _STATUS.updated_at = now
+
+
+def _progress_worker(stop_event: threading.Event) -> None:
+    while not stop_event.wait(0.5):
+        with _STATUS_LOCK:
+            if not _STATUS.running:
+                continue
+            start_progress = _STATUS.phase_start_progress
+            end_progress = _STATUS.phase_end_progress
+            phase_started_at = _STATUS.phase_started_at
+            phase_window_s = _STATUS.phase_window_s
+            current_progress = _STATUS.progress
+
+        if end_progress <= start_progress:
+            continue
+
+        elapsed = max(0.0, time.monotonic() - phase_started_at)
+        fraction = min(0.95, elapsed / phase_window_s)
+        target_progress = start_progress + int((end_progress - start_progress) * fraction)
+        target_progress = max(start_progress, min(end_progress, target_progress))
+
+        if target_progress > current_progress:
+            _update_status(progress=target_progress)
+
+
+def _start_progress_tracking() -> None:
+    global _STATUS_STOP_EVENT, _STATUS_WORKER
+    _STATUS_STOP_EVENT = threading.Event()
+    _STATUS_WORKER = threading.Thread(
+        target=_progress_worker,
+        args=(_STATUS_STOP_EVENT,),
+        daemon=True,
+    )
+    _STATUS_WORKER.start()
+
+
+def _stop_progress_tracking() -> None:
+    global _STATUS_STOP_EVENT, _STATUS_WORKER
+    if _STATUS_STOP_EVENT is not None:
+        _STATUS_STOP_EVENT.set()
+    if _STATUS_WORKER is not None and _STATUS_WORKER.is_alive():
+        _STATUS_WORKER.join(timeout=1.0)
+    _STATUS_STOP_EVENT = None
+    _STATUS_WORKER = None
+
+
 def _list_namespace_dirs(assessment_dir: Path) -> list[Path]:
     if not assessment_dir.is_dir():
         raise ValueError(f"Assessment directory not found: {assessment_dir}")
@@ -145,6 +265,14 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _write_text(self, status_code: int, payload: str) -> None:
+        body = payload.encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
         # Silence noisy health probes while keeping logs for other endpoints.
         path = urlparse(self.path).path
@@ -156,6 +284,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self._write_json(200, {"status": "ok"})
+            return
+        if parsed.path in {"/status", "/analysis/status"}:
+            self._write_text(200, f"{_snapshot_progress()}\n")
             return
         self._write_json(404, {"error": "not found"})
 
@@ -201,82 +332,135 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
 
         timeout_s = int(os.getenv("KUBEOPTIX_API_TIMEOUT_S", "7200"))
+        progress_window_s = float(os.getenv("KUBEOPTIX_PROGRESS_WINDOW_S", "18"))
+
+        with _STATUS_LOCK:
+            if _STATUS.running:
+                self._write_json(
+                    409,
+                    {
+                        "error": "analysis already running",
+                        "progress": _STATUS.progress,
+                    },
+                )
+                return
 
         run_results: list[dict] = []
         has_error = False
         reports_dir.mkdir(parents=True, exist_ok=True)
 
-        for namespace_dir in namespace_dirs:
-            report_file = reports_dir / f"{namespace_dir.name}.md"
-            report_file.parent.mkdir(parents=True, exist_ok=True)
+        _update_status(progress=0, running=True, phase="preparing")
+        _start_progress_tracking()
 
-            try:
+        try:
+            _set_phase("validating", 0, 8, progress_window_s * 0.6)
+
+            namespace_count = len(namespace_dirs)
+            if namespace_count == 0:
+                raise ValueError(f"No namespace directories found under {assessment_dir}")
+
+            _set_phase("preparing", 8, 12, progress_window_s * 0.6)
+
+            base_progress = 12
+            final_wrapup_start = 95
+            remaining_progress = final_wrapup_start - base_progress
+            per_namespace = remaining_progress // namespace_count
+            remainder = remaining_progress % namespace_count
+
+            current_start = base_progress
+
+            for index, namespace_dir in enumerate(namespace_dirs):
+                namespace_span = per_namespace + (1 if index < remainder else 0)
+                namespace_end = current_start + namespace_span
+                report_file = reports_dir / f"{namespace_dir.name}.md"
+                report_file.parent.mkdir(parents=True, exist_ok=True)
+
                 command = _build_command(mode, namespace_dir, report_file)
-            except ValueError as exc:
-                self._write_json(500, {"error": str(exc)})
-                return
 
-            try:
-                completed = subprocess.run(
-                    command,
-                    cwd=str(ROOT_DIR),
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_s,
-                    check=False,
+                _set_phase(
+                    f"analyzing {namespace_dir.name}",
+                    current_start,
+                    namespace_end,
+                    progress_window_s,
                 )
-            except subprocess.TimeoutExpired as exc:
-                has_error = True
+
+                try:
+                    completed = subprocess.run(
+                        command,
+                        cwd=str(ROOT_DIR),
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout_s,
+                        check=False,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    has_error = True
+                    run_results.append(
+                        {
+                            "namespace": namespace_dir.name,
+                            "report": str(report_file),
+                            "command": command,
+                            "exit_code": None,
+                            "error": "execution timeout",
+                            "timeout_s": timeout_s,
+                            "stdout": exc.stdout or "",
+                            "stderr": exc.stderr or "",
+                        }
+                    )
+                    current_start = namespace_end
+                    continue
+                except OSError as exc:
+                    has_error = True
+                    run_results.append(
+                        {
+                            "namespace": namespace_dir.name,
+                            "report": str(report_file),
+                            "command": command,
+                            "exit_code": None,
+                            "error": f"failed to execute script: {exc}",
+                            "stdout": "",
+                            "stderr": "",
+                        }
+                    )
+                    current_start = namespace_end
+                    continue
+
+                if completed.returncode != 0:
+                    has_error = True
+
                 run_results.append(
                     {
                         "namespace": namespace_dir.name,
                         "report": str(report_file),
                         "command": command,
-                        "exit_code": None,
-                        "error": "execution timeout",
-                        "timeout_s": timeout_s,
-                        "stdout": exc.stdout or "",
-                        "stderr": exc.stderr or "",
+                        "exit_code": completed.returncode,
+                        "stdout": completed.stdout,
+                        "stderr": completed.stderr,
                     }
                 )
-                continue
-            except OSError as exc:
-                has_error = True
-                run_results.append(
-                    {
-                        "namespace": namespace_dir.name,
-                        "report": str(report_file),
-                        "command": command,
-                        "exit_code": None,
-                        "error": f"failed to execute script: {exc}",
-                        "stdout": "",
-                        "stderr": "",
-                    }
-                )
-                continue
 
-            if completed.returncode != 0:
-                has_error = True
+                _update_status(progress=namespace_end)
+                current_start = namespace_end
 
-            run_results.append(
-                {
-                    "namespace": namespace_dir.name,
-                    "report": str(report_file),
-                    "command": command,
-                    "exit_code": completed.returncode,
-                    "stdout": completed.stdout,
-                    "stderr": completed.stderr,
-                }
-            )
+            _set_phase("finalizing", final_wrapup_start, 100, progress_window_s * 0.4)
+            _update_status(progress=100, phase="done", running=False)
 
-        payload = {
-            "mode": mode,
-            "assessment_dir": str(assessment_dir),
-            "reports_dir": str(reports_dir),
-            "worknodes_dir": str((assessment_dir / WORKNODES_DIRNAME).resolve()),
-            "reports": run_results,
-        }
-        self._write_json(500 if has_error else 200, payload)
+            payload = {
+                "mode": mode,
+                "assessment_dir": str(assessment_dir),
+                "reports_dir": str(reports_dir),
+                "worknodes_dir": str((assessment_dir / WORKNODES_DIRNAME).resolve()),
+                "reports": run_results,
+            }
+            self._write_json(500 if has_error else 200, payload)
+        except ValueError as exc:
+            _update_status(progress=_snapshot_progress(), phase="error", running=False)
+            self._write_json(500, {"error": str(exc)})
+        except Exception as exc:  # noqa: BLE001
+            _update_status(progress=_snapshot_progress(), phase="error", running=False)
+            self._write_json(500, {"error": str(exc)})
+        finally:
+            _stop_progress_tracking()
 
 
 def main() -> None:

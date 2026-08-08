@@ -61,6 +61,7 @@ Observações:
 - Os relatórios são gravados em `/app/data/reports`.
 - Os artefatos de entrada são lidos de `/app/data/assessment`.
 - A API aceita `POST /run` com um body JSON contendo apenas `mode`.
+- A API expõe `GET /status` com progresso em texto puro de `0` a `100`.
 - A API expõe `DELETE /reports` para limpar o conteúdo de `/app/data/reports`.
 - O chart força `replicaCount=1` e falha no render se configurado com qualquer outro valor.
 - O chart pode selecionar `storageClassName` automaticamente (`persistence.storageClassName=auto`): prioriza a classe padrão e, se não houver, usa a primeira classe disponível.

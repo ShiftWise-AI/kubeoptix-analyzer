@@ -61,6 +61,7 @@ Notes:
 - Reports are written to `/app/data/reports`.
 - Input artifacts are read from `/app/data/assessment`.
 - The API accepts `POST /run` with a JSON body containing only `mode`.
+- The API exposes `GET /status` with plain-text progress from `0` to `100`.
 - The API exposes `DELETE /reports` to clear the contents of `/app/data/reports`.
 - The chart enforces `replicaCount=1` and fails rendering if set to any other value.
 - The chart can auto-select `storageClassName` (`persistence.storageClassName=auto`): it prefers the default class and falls back to the first available class.
