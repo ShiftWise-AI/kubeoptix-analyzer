@@ -57,13 +57,13 @@ service:
   headless:
     enabled: true
     name: analyzer
-    port: 8080
+    port: 8000
   api:
     enabled: true
     name: analyzer-api
     type: ClusterIP
-    port: 8080
-    targetPort: 8080
+    port: 8000
+    targetPort: 8000
 
 route:
   enabled: true

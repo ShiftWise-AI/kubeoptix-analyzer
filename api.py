@@ -611,7 +611,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     host = os.getenv("KUBEOPTIX_API_HOST", "0.0.0.0")
-    port = int(os.getenv("KUBEOPTIX_API_PORT", "8080"))
+    port = int(os.getenv("KUBEOPTIX_API_PORT", "8000"))
     server = ThreadingHTTPServer((host, port), ApiHandler)
     print(f"[api] listening on http://{host}:{port}")
     server.serve_forever()

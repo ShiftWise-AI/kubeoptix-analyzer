@@ -33,6 +33,8 @@ spec:
 {{ .Values.startup.script | indent 14 }}
           {{- end }}
           env:
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
             - name: HOME
               value: {{ .Values.podEnv.HOME | quote }}
             - name: KUBECONFIG
