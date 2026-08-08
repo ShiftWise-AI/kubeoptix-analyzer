@@ -44,7 +44,7 @@ RUN python3 -m venv $VENV_DIR \
     && $VENV_DIR/bin/pip install --upgrade pip \
     && $VENV_DIR/bin/pip install --no-cache-dir -r requirements.txt 
 
-EXPOSE 8080
+EXPOSE 8000
 
 CMD ["python", "api.py"]
 
