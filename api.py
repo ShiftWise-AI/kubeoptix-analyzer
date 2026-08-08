@@ -252,6 +252,14 @@ def _list_assessment_folder_names(assessment_dir: Path) -> list[str]:
     return folder_names
 
 
+def _report_suffix_for_mode(mode: str) -> str:
+    if mode == "local":
+        return "-local"
+    if mode == "llm":
+        return "-llm"
+    return ""
+
+
 class ApiHandler(BaseHTTPRequestHandler):
     def _read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -404,7 +412,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             for index, namespace_dir in enumerate(namespace_dirs):
                 namespace_span = per_namespace + (1 if index < remainder else 0)
                 namespace_end = current_start + namespace_span
-                report_file = reports_dir / f"{namespace_dir.name}.md"
+                report_suffix = _report_suffix_for_mode(mode)
+                report_file = reports_dir / f"{namespace_dir.name}{report_suffix}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
 
                 command = _build_command(mode, namespace_dir, report_file)
