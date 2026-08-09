@@ -25,9 +25,6 @@ WORKNODES_DIRNAME = "worknodes"
 EMBEDDED_DISABLED_MSG = (
     "Embedded mode is not available in container or OpenShift environments yet."
 )
-OPENSHIFT_LLM_DISABLED_MSG = (
-    "LLM mode is not available when ENV is set to 'openshift'."
-)
 INVALID_MODE_MSG = (
     "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
 )
@@ -114,10 +111,6 @@ def _select_namespace_dirs(namespace_dirs: list[Path], namespace_names: list[str
             f"Namespaces not found: {missing_list}. Available namespaces: {available}"
         )
     return [by_name[name] for name in namespace_names]
-
-
-def _is_openshift_env() -> bool:
-    return os.getenv("ENV", "").strip().lower() == "openshift"
 
 
 def _is_container_or_ocp() -> bool:
@@ -459,8 +452,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             mode = _resolve_mode(mode_value)
             namespace_names = _resolve_namespaces(namespaces_value)
 
-            if mode == "llm" and _is_openshift_env():
-                raise ValueError(OPENSHIFT_LLM_DISABLED_MSG)
             if mode == "embedded" and _is_container_or_ocp():
                 raise ValueError(EMBEDDED_DISABLED_MSG)
 
