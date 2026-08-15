@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 
 # Load .env from the project root, if it exists.
 _ROOT = Path(__file__).resolve().parent.parent
@@ -32,21 +32,15 @@ class EmbeddedSettings:
 
 
 def validate_llm_env() -> None:
-    if not _ENV_FILE.is_file():
-        raise SystemExit(
-            "No .env file found at the project root. "
-            "Create it from .env.example and fill in the llm mode variables."
-        )
-
-    values = dotenv_values(_ENV_FILE)
-    cursor_key = str(values.get("CURSOR_API_KEY") or "").strip()
-    llm_key = str(values.get("LLM_API_KEY") or "").strip()
+    cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
+    llm_key = os.getenv("LLM_API_KEY", "").strip()
 
     if cursor_key or llm_key:
         return
 
     raise SystemExit(
-        "llm mode requires credentials in .env. Fill one of these options:\n"
+        "llm mode requires credentials in the environment or in .env. "
+        "Fill one of these options:\n"
         "- CURSOR_API_KEY to use Cursor SDK\n"
         "- LLM_API_KEY to use an OpenAI-compatible API\n"
         "See .env.example for the expected format."
