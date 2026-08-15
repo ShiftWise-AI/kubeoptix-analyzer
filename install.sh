@@ -15,16 +15,7 @@ GIT_REF="${GIT_REF:-feature/ocp}"
 RESET="${RESET:-false}"
 WAIT_BUILD="${WAIT_BUILD:-true}"
 BUILD_FROM_LOCAL="${BUILD_FROM_LOCAL:-true}"
-ROUTE_NAME="${ROUTE_NAME:-}"
-
-read_route_name_from_values() {
-  local file="$1"
-  awk '
-    /^route:[[:space:]]*$/ { in_route=1; next }
-    in_route && /^[^[:space:]]/ { in_route=0 }
-    in_route && $1 == "name:" { print $2; exit }
-  ' "$file" | sed 's/^"\(.*\)"$/\1/'
-}
+APP_READY_TIMEOUT="${APP_READY_TIMEOUT:-300s}"
 
 usage() {
   echo "Usage: $0 -f <values-file>"
@@ -138,30 +129,33 @@ fi
 echo "[INFO] Phase 2/2: Deploying StatefulSet and runtime objects after successful build..."
 helm "${HELM_ARGS[@]}" --set deploy.enabled=true
 
+STATEFULSET_NAME="$(oc get statefulset -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+SERVICE_NAME="$(oc get service -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+
+if [[ -z "$STATEFULSET_NAME" || -z "$SERVICE_NAME" ]]; then
+  echo "[ERROR] StatefulSet or Service not found for release $RELEASE in namespace $NS"
+  exit 1
+fi
+
+echo "[INFO] Waiting for StatefulSet '$STATEFULSET_NAME' to become ready..."
+oc rollout status "statefulset/$STATEFULSET_NAME" -n "$NS" --timeout="$APP_READY_TIMEOUT"
+
+echo "[INFO] Checking application health through Service '$SERVICE_NAME'..."
+SERVICE_PROXY_PATH="/api/v1/namespaces/$NS/services/http:$SERVICE_NAME:http/proxy/health"
+if ! oc get --raw "$SERVICE_PROXY_PATH"; then
+  echo
+  echo "[ERROR] Application health check failed through Service '$SERVICE_NAME'."
+  echo "[INFO] Inspect the workload with:"
+  echo "  oc get pods -n $NS"
+  echo "  oc logs -n $NS statefulset/$STATEFULSET_NAME --tail=200"
+  exit 1
+fi
+echo
+
 echo "[INFO] Helm status:"
 helm status "$RELEASE" -n "$NS"
 
 echo "[INFO] Current resources:"
 oc get all -n "$NS"
 
-echo "[INFO] Route health test:"
-if [[ -z "$ROUTE_NAME" ]]; then
-  ROUTE_NAME="$(read_route_name_from_values "$VALUES_FILE")"
-fi
-ROUTE_NAME="${ROUTE_NAME:-analyzer}"
-
-ROUTE_HOST="$(oc get route "$ROUTE_NAME" -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
-if [[ -n "$ROUTE_HOST" ]]; then
-  echo "[INFO] URL: https://$ROUTE_HOST/health"
-  curl -k --fail --show-error --silent "https://$ROUTE_HOST/health" || {
-    echo "[WARN] Health check failed. Inspect pods/logs with:"
-    echo "  oc get pods -n $NS"
-    echo "  oc logs -n $NS statefulset/$RELEASE --tail=200"
-    exit 1
-  }
-  echo
-  echo "[INFO] Installation and health check completed successfully."
-else
-  echo "[WARN] Route '$ROUTE_NAME' not found in namespace $NS"
-  echo "[WARN] Verify route settings in values and chart templates."
-fi
+echo "[INFO] Installation and Service health check completed successfully."

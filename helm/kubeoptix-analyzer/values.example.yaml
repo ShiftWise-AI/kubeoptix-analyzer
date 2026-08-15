@@ -54,10 +54,6 @@ secretEnv:
 
 
 service:
-  headless:
-    enabled: true
-    name: analyzer
-    port: 8000
   api:
     enabled: true
     name: analyzer-api

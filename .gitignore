@@ -103,5 +103,5 @@ $RECYCLE.BIN/
 logs/
 
 # Helm values locais (podem conter credenciais)
-helm/kubeoptix-analyzer/values.yaml
-helm/kubeoptix-analyzer/values.private.yaml
+helm/kubeoptix-harvester/values.yaml
+helm/kubeoptix-harvester/values.private.yaml
