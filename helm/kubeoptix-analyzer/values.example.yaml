@@ -69,6 +69,7 @@ route:
   enabled: true
   name: analyzer
   host: ""
+  timeout: 7200s
   termination: edge
   insecureEdgeTerminationPolicy: Redirect
 

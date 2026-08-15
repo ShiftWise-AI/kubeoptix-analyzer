@@ -4,6 +4,8 @@ kind: Route
 metadata:
   name: {{ .Values.route.name }}
   namespace: {{ include "kubeoptix-analyzer.namespace" . }}
+  annotations:
+    haproxy.router.openshift.io/timeout: {{ .Values.route.timeout | default "7200s" | quote }}
   labels:
     {{- include "kubeoptix-analyzer.labels" . | nindent 4 }}
 spec:
