@@ -54,23 +54,12 @@ secretEnv:
 
 
 service:
-  headless:
-    enabled: true
-    name: analyzer
-    port: 8000
   api:
     enabled: true
     name: analyzer-api
     type: ClusterIP
     port: 8000
     targetPort: 8000
-
-route:
-  enabled: true
-  name: analyzer
-  host: ""
-  termination: edge
-  insecureEdgeTerminationPolicy: Redirect
 
 scalePolicy:
   enabled: true

@@ -53,7 +53,7 @@ Install or upgrade:
 helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
   --namespace shiftwise-ai \
   --create-namespace \
-  --set env.MODE=local
+  -f /path/to/values.yaml
 ```
 
 Notes:
@@ -66,7 +66,7 @@ Notes:
 - The chart enforces `replicaCount=1` and fails rendering if set to any other value.
 - The chart can auto-select `storageClassName` (`persistence.storageClassName=auto`): it prefers the default class and falls back to the first available class.
 - If `persistence.existingClaim` is set, the chart uses that PVC directly and does not create a new PVC.
-- OpenShift Route is enabled by default.
+- The API is exposed internally through a `ClusterIP` Service.
 - The chart creates OpenShift `ImageStream` + `BuildConfig` by default.
 - Default BuildConfig Git source: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
 - Source authentication uses an existing secret named `github-auth`.

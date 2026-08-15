@@ -14,8 +14,5 @@
 5. Start image build (first deployment):
    oc start-build {{ include "kubeoptix-analyzer.fullname" . }} -n {{ include "kubeoptix-analyzer.namespace" . }} --follow
 
-6. Check route URL:
-   oc get route {{ .Values.route.name }} -n {{ include "kubeoptix-analyzer.namespace" . }}
-
-7. Test API:
-   curl -k https://$(oc get route {{ .Values.route.name }} -n {{ include "kubeoptix-analyzer.namespace" . }} -o jsonpath='{.spec.host}')/health
+6. Test the API through the Service proxy:
+   oc get --raw /api/v1/namespaces/{{ include "kubeoptix-analyzer.namespace" . }}/services/http:{{ .Values.service.api.name }}:http/proxy/health
