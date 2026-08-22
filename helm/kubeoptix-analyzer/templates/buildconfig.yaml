@@ -11,15 +11,11 @@ spec:
   source:
     type: Git
     git:
-      uri: {{ .Values.build.source.gitUri | quote }}
-      ref: {{ .Values.build.source.gitRef | quote }}
-    {{- if .Values.build.source.contextDir }}
-    contextDir: {{ .Values.build.source.contextDir | quote }}
-    {{- end }}
-    {{- $sourceSecretName := .Values.build.sourceSecret.name | default (printf "%s-git-auth" (include "kubeoptix-analyzer.fullname" .)) }}
-    {{- if or .Values.build.sourceSecret.create .Values.build.sourceSecret.name }}
+      uri: {{ .Values.build.git.uri | quote }}
+      ref: {{ .Values.build.git.ref | quote }}
+    {{- if .Values.build.git.sourceSecret }}
     sourceSecret:
-      name: {{ $sourceSecretName }}
+      name: {{ .Values.build.git.sourceSecret | quote }}
     {{- end }}
   strategy:
     type: Docker

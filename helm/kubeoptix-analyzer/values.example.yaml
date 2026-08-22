@@ -17,15 +17,10 @@ build:
   imageStreamName: kubeoptix-analyzer
   outputTag: latest
   containerfilePath: Containerfile
-  source:
-    gitUri: https://github.com/ShiftWise-AI/kubeoptix-analyzer.git
-    gitRef: feature/ocp
-    contextDir: ""
-  sourceSecret:
-    create: false
-    name: "github-auth"
-    username: ""
-    token: ""
+  git:
+    uri: https://github.com/ShiftWise-AI/kubeoptix-analyzer.git
+    ref: feature/default-helm
+    sourceSecret: github-auth
 
 nameOverride: ""
 fullnameOverride: ""

@@ -13,7 +13,8 @@ NS="${NS:-shiftwise-ai}"
 CHART_PATH="${CHART_PATH:-./helm/kubeoptix-analyzer}"
 VALUES_FILE="${VALUES_FILE:-}"
 GIT_URI="${GIT_URI:-https://github.com/ShiftWise-AI/kubeoptix-analyzer.git}"
-GIT_REF="${GIT_REF:-feature/ocp}"
+GIT_REF="${GIT_REF:-feature/default-helm}"
+GIT_SOURCE_SECRET="${GIT_SOURCE_SECRET:-github-auth}"
 RESET="${RESET:-false}"
 WAIT_BUILD="${WAIT_BUILD:-true}"
 BUILD_FROM_LOCAL="${BUILD_FROM_LOCAL:-true}"
@@ -98,9 +99,9 @@ HELM_ARGS=(
   --set namespace.create=false
   --set namespace.name="$NS"
   --set build.enabled=true
-  --set build.sourceSecret.create=false
-  --set build.source.gitUri="$GIT_URI"
-  --set build.source.gitRef="$GIT_REF"
+  --set build.git.uri="$GIT_URI"
+  --set build.git.ref="$GIT_REF"
+  --set build.git.sourceSecret="$GIT_SOURCE_SECRET"
 )
 
 echo "[INFO] Git source authentication is managed only by values file settings."
@@ -165,7 +166,7 @@ oc get all -n "$NS"
 
 if [[ "$POST_INSTALL_CLEANUP" == "true" ]]; then
   echo "[INFO] Running post-install cleanup for orphan resources..."
-  RELEASE="$RELEASE" NS="$NS" DRY_RUN="$CLEANUP_DRY_RUN" TARGET_KINDS="$CLEANUP_TARGET_KINDS" \
+  RELEASE="$RELEASE" NS="$NS" DRY_RUN="$CLEANUP_DRY_RUN" TARGET_KINDS="$CLEANUP_TARGET_KINDS" UNUSED_SECRET_PATTERNS="${UNUSED_SECRET_PATTERNS:-}" \
     bash "$ROOT_DIR/cleanup-ocp.sh"
 else
   echo "[INFO] Post-install cleanup skipped (POST_INSTALL_CLEANUP=false)."
