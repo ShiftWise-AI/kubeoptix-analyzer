@@ -32,9 +32,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default .Release.Namespace .Values.namespace.name -}}
 {{- end -}}
 
+{{- define "kubeoptix-analyzer.imageStreamName" -}}
+{{- default (include "kubeoptix-analyzer.fullname" .) .Values.build.imageStreamName -}}
+{{- end -}}
+
 {{- define "kubeoptix-analyzer.image" -}}
 {{- if and .Values.image.useBuildOutput .Values.build.enabled -}}
-{{- printf "%s/%s/%s:%s" .Values.build.registryHost (include "kubeoptix-analyzer.namespace" .) .Values.build.imageStreamName .Values.build.outputTag -}}
+{{- printf "%s/%s/%s:%s" .Values.build.registryHost (include "kubeoptix-analyzer.namespace" .) (include "kubeoptix-analyzer.imageStreamName" .) (.Values.build.outputTag | default "latest") -}}
 {{- else -}}
 {{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
 {{- end -}}

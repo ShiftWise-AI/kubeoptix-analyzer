@@ -3,24 +3,25 @@ deploy:
 
 namespace:
   create: false
-  name: shiftwise-ai
+  name: ""
 
 image:
   useBuildOutput: true
-  repository: default-route-openshift-image-registry.apps-crc.testing/shiftwise-ai/kubeoptix-analyzer
+  repository: image-registry.openshift-image-registry.svc:5000/kubeoptix-analyzer
   tag: latest
   pullPolicy: Always
 
 build:
   enabled: true
   registryHost: image-registry.openshift-image-registry.svc:5000
-  imageStreamName: kubeoptix-analyzer
+  # Defaults to the release fullname when empty.
+  imageStreamName: ""
   outputTag: latest
   containerfilePath: Containerfile
   git:
-    uri: https://github.com/ShiftWise-AI/kubeoptix-analyzer.git
-    ref: feature/default-helm
-    sourceSecret: github-auth
+    uri: ""
+    ref: main
+    sourceSecret: ""
 
 nameOverride: ""
 fullnameOverride: ""
@@ -32,21 +33,18 @@ startup:
 podEnv:
   HOME: /tmp
   KUBECONFIG: /tmp/kubeconfig
-
-env:
   TZ: ""
-  ENV: ""
 
+env: {}
 
 secretEnv:
-  create: true
+  create: false
   name: ""
   cursorApiKey: ""
   cursorModel: composer-2.5
   llmApiKey: ""
   llmBaseUrl: https://api.openai.com/v1
   llmModel: gpt-4o-mini
-
 
 service:
   api:
@@ -61,10 +59,13 @@ scalePolicy:
   maxReplicas: 1
 
 persistence:
-  enabled: true
-  existingClaim: harvester-app-data
+  enabled: false
+  name: app-data
+  existingClaim: ""
   mountPath: /app/data
 
+probes:
+  enabled: false
 
 resources:
   requests:

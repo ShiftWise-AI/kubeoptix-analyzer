@@ -56,6 +56,39 @@ helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
   -f /path/to/values.yaml
 ```
 
+Using the project installer (recommended):
+
+```bash
+./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+The installer runs a post-install cleanup step by default. It removes `ConfigMap` resources named `kubeoptix-analyzer-*`, Helm release Secrets named `sh.helm.release.v1*`, legacy user `dockercfg` Secrets, and stale release resources (such as unused `Secret` and cert-manager objects when present).
+
+Cleanup controls:
+
+```bash
+# Disable cleanup
+POST_INSTALL_CLEANUP=false ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+
+# Keep cleanup enabled but run in dry-run mode
+CLEANUP_DRY_RUN=true ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+
+# Restrict cleanup to selected kinds
+CLEANUP_TARGET_KINDS=configmap,secret ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+
+# Use a different prefix for unused ConfigMap removal
+UNUSED_CONFIGMAP_PREFIX=my-release- bash ./cleanup-ocp.sh
+
+# Override the unused Secret name patterns
+UNUSED_SECRET_PATTERNS='sh.helm.release.v1*,shiftwise-ai-user-dockercfg-*' ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+Manual cleanup run:
+
+```bash
+RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=true bash ./cleanup-ocp.sh
+```
+
 Notes:
 
 - Reports are written to `/app/data/reports`.
@@ -70,6 +103,16 @@ Notes:
 - The chart creates OpenShift `ImageStream` + `BuildConfig` by default.
 - Default BuildConfig Git source: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
 - Source authentication uses an existing secret named `github-auth`.
+
+```yaml
+build:
+  enabled: true
+  git:
+    uri: https://github.com/ShiftWise-AI/kubeoptix-analyzer.git
+    ref: feature/default-helm
+    sourceSecret: github-auth
+```
+
 - Analyzer runtime credentials are configured in `secretEnv`. By default the chart creates a secret with `CURSOR_API_KEY`, `CURSOR_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`.
 - To reuse an existing secret for analyzer credentials, set `secretEnv.create=false` and `secretEnv.name=<secret-name>`.
 

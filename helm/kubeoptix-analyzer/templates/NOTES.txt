@@ -8,8 +8,7 @@
    oc get is,bc -n {{ include "kubeoptix-analyzer.namespace" . }}
 
 4. If the Git repository is private, configure source secret:
-   Option A: create secret manually and set .Values.build.sourceSecret.name
-   Option B: set .Values.build.sourceSecret.create=true with username/token
+   Ensure the existing Secret is configured in .Values.build.git.sourceSecret
 
 5. Start image build (first deployment):
    oc start-build {{ include "kubeoptix-analyzer.fullname" . }} -n {{ include "kubeoptix-analyzer.namespace" . }} --follow
