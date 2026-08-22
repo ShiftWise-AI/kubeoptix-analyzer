@@ -56,6 +56,33 @@ helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
   -f /path/to/values.yaml
 ```
 
+Using the project installer (recommended):
+
+```bash
+./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+The installer runs a post-install orphan cleanup step by default to remove stale resources from the release (such as unused `ConfigMap`, `Secret`, and cert-manager objects when present).
+
+Cleanup controls:
+
+```bash
+# Disable cleanup
+POST_INSTALL_CLEANUP=false ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+
+# Keep cleanup enabled but run in dry-run mode
+CLEANUP_DRY_RUN=true ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+
+# Restrict cleanup to selected kinds
+CLEANUP_TARGET_KINDS=configmap,secret ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+Manual cleanup run:
+
+```bash
+RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=true bash ./cleanup-ocp.sh
+```
+
 Notes:
 
 - Reports are written to `/app/data/reports`.

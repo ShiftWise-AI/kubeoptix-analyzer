@@ -6,6 +6,8 @@ set -euo pipefail
 # Then run:
 #   ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 RELEASE="${RELEASE:-kubeoptix-analyzer}"
 NS="${NS:-shiftwise-ai}"
 CHART_PATH="${CHART_PATH:-./helm/kubeoptix-analyzer}"
@@ -16,6 +18,9 @@ RESET="${RESET:-false}"
 WAIT_BUILD="${WAIT_BUILD:-true}"
 BUILD_FROM_LOCAL="${BUILD_FROM_LOCAL:-true}"
 APP_READY_TIMEOUT="${APP_READY_TIMEOUT:-300s}"
+POST_INSTALL_CLEANUP="${POST_INSTALL_CLEANUP:-true}"
+CLEANUP_DRY_RUN="${CLEANUP_DRY_RUN:-false}"
+CLEANUP_TARGET_KINDS="${CLEANUP_TARGET_KINDS:-configmap,secret,certificate,certificaterequest,order,challenge}"
 
 usage() {
   echo "Usage: $0 -f <values-file>"
@@ -157,5 +162,13 @@ helm status "$RELEASE" -n "$NS"
 
 echo "[INFO] Current resources:"
 oc get all -n "$NS"
+
+if [[ "$POST_INSTALL_CLEANUP" == "true" ]]; then
+  echo "[INFO] Running post-install cleanup for orphan resources..."
+  RELEASE="$RELEASE" NS="$NS" DRY_RUN="$CLEANUP_DRY_RUN" TARGET_KINDS="$CLEANUP_TARGET_KINDS" \
+    bash "$ROOT_DIR/cleanup-ocp.sh"
+else
+  echo "[INFO] Post-install cleanup skipped (POST_INSTALL_CLEANUP=false)."
+fi
 
 echo "[INFO] Installation and Service health check completed successfully."
