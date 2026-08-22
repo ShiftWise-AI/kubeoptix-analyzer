@@ -11,15 +11,20 @@ DRY_RUN="${DRY_RUN:-true}"
 TARGET_KINDS="${TARGET_KINDS:-configmap,secret,certificate,certificaterequest,order,challenge}"
 UNUSED_CONFIGMAP_PREFIX="${UNUSED_CONFIGMAP_PREFIX:-${RELEASE}-}"
 UNUSED_SECRET_PATTERNS="${UNUSED_SECRET_PATTERNS:-sh.helm.release.v1*,shiftwise-ai-user-dockercfg-*,shiftwisea-ai-user-dockercfg-*}"
+DELETE_BUILDS="${DELETE_BUILDS:-true}"
+BUILD_CONFIG_NAME="${BUILD_CONFIG_NAME:-${RELEASE}}"
+# Builds in these phases are kept because they are still in progress.
+KEEP_BUILD_PHASES="${KEEP_BUILD_PHASES:-New,Pending,Running}"
 
 usage() {
   cat <<EOF
 Usage:
-  RELEASE=<release> NS=<namespace> [DRY_RUN=true|false] [TARGET_KINDS=kind1,kind2] [UNUSED_CONFIGMAP_PREFIX=prefix] [UNUSED_SECRET_PATTERNS=pattern1,pattern2] $0
+  RELEASE=<release> NS=<namespace> [DRY_RUN=true|false] [TARGET_KINDS=kind1,kind2] [UNUSED_CONFIGMAP_PREFIX=prefix] [UNUSED_SECRET_PATTERNS=pattern1,pattern2] [DELETE_BUILDS=true|false] [BUILD_CONFIG_NAME=name] [KEEP_BUILD_PHASES=phase1,phase2] $0
 
 Examples:
   RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=true $0
   RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=false TARGET_KINDS=configmap,secret $0
+  RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=false DELETE_BUILDS=true $0
 EOF
 }
 
@@ -47,6 +52,7 @@ echo "[INFO] Dry-run: $DRY_RUN"
 echo "[INFO] Target kinds: $TARGET_KINDS"
 echo "[INFO] Unused ConfigMap prefix: $UNUSED_CONFIGMAP_PREFIX"
 echo "[INFO] Unused Secret patterns: $UNUSED_SECRET_PATTERNS"
+echo "[INFO] Delete builds: $DELETE_BUILDS (buildconfig=$BUILD_CONFIG_NAME, keep phases=$KEEP_BUILD_PHASES)"
 
 unused_configmaps="$(oc get configmap -n "$NS" -o name 2>/dev/null | awk -F/ -v prefix="$UNUSED_CONFIGMAP_PREFIX" '$2 ~ "^" prefix { print $2 }')"
 if [[ -n "$unused_configmaps" ]]; then
@@ -111,6 +117,34 @@ if [[ ${#unused_secrets[@]} -gt 0 ]]; then
   fi
 else
   echo "[INFO] No unused Secrets found."
+fi
+
+if [[ "$DELETE_BUILDS" == "true" ]]; then
+  finished_builds="$(oc get build -n "$NS" -l "openshift.io/build-config.name=${BUILD_CONFIG_NAME}" \
+    -o custom-columns=NAME:.metadata.name,PHASE:.status.phase --no-headers 2>/dev/null \
+    | awk -v keep=",${KEEP_BUILD_PHASES}," 'index(keep, "," $2 ",") == 0 { print $1 }')"
+
+  if [[ -n "$finished_builds" ]]; then
+    echo "[INFO] Finished Builds identified:"
+    while IFS= read -r build_name; do
+      [[ -z "$build_name" ]] && continue
+      echo "  - build/$build_name (ns=$NS)"
+    done <<<"$finished_builds"
+
+    if [[ "$DRY_RUN" == "false" ]]; then
+      echo "[INFO] Deleting finished Builds..."
+      while IFS= read -r build_name; do
+        [[ -z "$build_name" ]] && continue
+        oc -n "$NS" delete build "$build_name" --ignore-not-found=true
+      done <<<"$finished_builds"
+    else
+      echo "[INFO] Dry-run enabled. Finished Builds were not deleted."
+    fi
+  else
+    echo "[INFO] No finished Builds found for buildconfig '$BUILD_CONFIG_NAME'."
+  fi
+else
+  echo "[INFO] Build cleanup disabled."
 fi
 
 awk '

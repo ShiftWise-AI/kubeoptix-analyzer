@@ -24,5 +24,5 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: {{ printf "%s:%s" .Values.build.imageStreamName .Values.build.outputTag | quote }}
+      name: {{ printf "%s:%s" (include "kubeoptix-analyzer.imageStreamName" .) (.Values.build.outputTag | default "latest") | quote }}
 {{- end }}

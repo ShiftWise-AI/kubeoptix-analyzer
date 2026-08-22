@@ -1,0 +1,76 @@
+deploy:
+  enabled: true
+
+namespace:
+  create: false
+  name: ""
+
+image:
+  useBuildOutput: true
+  repository: image-registry.openshift-image-registry.svc:5000/kubeoptix-analyzer
+  tag: latest
+  pullPolicy: Always
+
+build:
+  enabled: true
+  registryHost: image-registry.openshift-image-registry.svc:5000
+  # Defaults to the release fullname when empty.
+  imageStreamName: ""
+  outputTag: latest
+  containerfilePath: Containerfile
+  git:
+    uri: ""
+    ref: main
+    sourceSecret: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+startup:
+  loginWithServiceAccount: false
+  script: ""
+
+podEnv:
+  HOME: /tmp
+  KUBECONFIG: /tmp/kubeconfig
+  TZ: ""
+
+env: {}
+
+secretEnv:
+  create: false
+  name: ""
+  cursorApiKey: ""
+  cursorModel: composer-2.5
+  llmApiKey: ""
+  llmBaseUrl: https://api.openai.com/v1
+  llmModel: gpt-4o-mini
+
+service:
+  api:
+    enabled: true
+    name: analyzer-api
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+scalePolicy:
+  enabled: true
+  maxReplicas: 1
+
+persistence:
+  enabled: false
+  name: app-data
+  existingClaim: ""
+  mountPath: /app/data
+
+probes:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
