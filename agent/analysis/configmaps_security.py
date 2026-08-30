@@ -1,4 +1,4 @@
-"""Varredura de ConfigMaps em busca de informações sensíveis."""
+"""Scan of ConfigMaps for sensitive information."""
 
 from __future__ import annotations
 
@@ -84,52 +84,52 @@ def analyze_configmaps(ns: NamespaceArtifacts) -> ConfigMapSecurityResult:
 
     if result.hits:
         result.recommendations.append(
-            "Mover segredos (senhas, tokens, certificados privados) de ConfigMap "
-            "para Secret ou cofre externo (Vault/External Secrets), com rotação."
+            "Move secrets (passwords, tokens, private certificates) from ConfigMap "
+            "to a Secret or external vault (Vault/External Secrets), with rotation."
         )
         result.recommendations.append(
-            "Garantir que pipelines de coleta continuem mascarando valores sensíveis "
-            "antes de compartilhar artefatos."
+            "Ensure collection pipelines continue masking sensitive values before "
+            "sharing artifacts."
         )
         result.recommendations.append(
-            "Revisar RBAC de leitura de ConfigMaps/Secrets no namespace."
+            "Review RBAC for reading ConfigMaps/Secrets in the namespace."
         )
     else:
         result.recommendations.append(
-            "Nenhum indício forte de segredo em ConfigMaps nos artefatos "
-            "(valores podem já estar sanitizados). Validar processo de build/deploy "
-            "para impedir regressão."
+            "No strong evidence of secrets in ConfigMaps in the artifacts "
+            "(values may already be sanitized). Validate the build/deploy process to "
+            "prevent regression."
         )
-        # Ainda assim DB URLs / usuários em CM são risco menor
+        # Database URLs / users in a ConfigMap remain a lower risk, but should still be handled carefully.
         result.recommendations.append(
-            "Preferir referenciar credenciais de banco via Secret mesmo quando a URL "
-            "JDBC permanece no ConfigMap."
+            "Prefer referencing database credentials via Secret even when the JDBC URL "
+            "remains in the ConfigMap."
         )
     return result
 
 
 def render_configmaps_md(ns_name: str, result: ConfigMapSecurityResult) -> str:
     lines = [
-        f"# Análise de ConfigMaps — informações sensíveis — `{ns_name}`",
+        f"# ConfigMap analysis — sensitive information — `{ns_name}`",
         "",
-        f"- ConfigMaps analisados: **{result.scanned}**",
-        f"- Com dados (`data`/`binaryData`): **{result.with_data}**",
-        f"- Achados sensíveis: **{len(result.hits)}**",
+        f"- ConfigMaps analyzed: **{result.scanned}**",
+        f"- With data (`data`/`binaryData`): **{result.with_data}**",
+        f"- Sensitive findings: **{len(result.hits)}**",
         "",
-        "## Achados",
+        "## Findings",
         "",
     ]
     if not result.hits:
         lines.append(
-            "Nenhuma evidência clara de segredo/certificado/token nos ConfigMaps "
-            "analisados (ou dados já sanitizados)."
+            "No clear evidence of secrets/certificates/tokens in the analyzed ConfigMaps "
+            "(or the data is already sanitized)."
         )
         lines.append("")
     else:
         lines.extend(
             [
-                "| ConfigMap | App | Chave | Categoria | Evidência (truncada) |",
-                "|-----------|-----|-------|-----------|----------------------|",
+                "| ConfigMap | App | Key | Category | Evidence (truncated) |",
+                "|-----------|-----|-----|----------|----------------------|",
             ]
         )
         for hit in result.hits:
@@ -139,7 +139,7 @@ def render_configmaps_md(ns_name: str, result: ConfigMapSecurityResult) -> str:
             )
         lines.append("")
 
-    lines.extend(["## Recomendações", ""])
+    lines.extend(["## Recommendations", ""])
     for idx, rec in enumerate(result.recommendations, start=1):
         lines.append(f"{idx}. {rec}")
     lines.append("")

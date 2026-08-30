@@ -98,25 +98,25 @@ def analyze_observability(
 
     if not result.service_monitors and not result.pod_monitors:
         result.opportunities.append(
-            "Não há ServiceMonitor/PodMonitor no namespace — oportunidade de "
-            "expor métricas via Prometheus Operator para SLIs/SLOs."
+            "There is no ServiceMonitor/PodMonitor in the namespace — an opportunity to "
+            "expose metrics through the Prometheus Operator for SLIs/SLOs."
         )
     if result.apps_without_monitor:
         result.opportunities.append(
-            "Aplicações sem monitor dedicado: "
+            "Applications without a dedicated monitor: "
             + ", ".join(f"`{a}`" for a in result.apps_without_monitor[:20])
             + ("…" if len(result.apps_without_monitor) > 20 else "")
             + "."
         )
     if not result.prometheus_rules:
         result.opportunities.append(
-            "Ausência de PrometheusRule — criar alertas para taxa de erro, "
-            "latência e reinícios de pod."
+            "No PrometheusRule is present — create alerts for error rate, latency, "
+            "and pod restarts."
         )
     if result.errors_by_app:
         top = result.errors_by_app.most_common(3)
         result.opportunities.append(
-            "Concentrar correção de erros nas aplicações com mais ocorrências: "
+            "Concentrate error remediation on applications with the highest occurrence counts: "
             + ", ".join(f"`{a}` ({n})" for a, n in top)
             + "."
         )
@@ -124,18 +124,18 @@ def analyze_observability(
         "ERROR"
     ):
         result.opportunities.append(
-            "Padronizar logging estruturado (JSON) com `trace_id`/`correlation_id` "
-            "para melhorar rastreabilidade operacional entre serviços."
+            "Standardize structured logging (JSON) with `trace_id`/`correlation_id` "
+            "to improve operational traceability across services."
         )
     if any("previous" in f.name for f in ns.log_files):
         result.opportunities.append(
-            "Há logs `-previous` (pods reiniciados) — investigar causas de "
-            "reinício (OOM, falhas de probe, crashes) e correlacionar com eventos."
+            "There are `-previous` logs (restarted pods) — investigate restart causes "
+            "(OOM, probe failures, crashes) and correlate with events."
         )
     if not result.opportunities:
         result.opportunities.append(
-            "Poucos sinais de gap de observabilidade nos artefatos; validar "
-            "dashboards e runbooks no ambiente de operação."
+            "Few signs of observability gaps in the artifacts; validate dashboards and "
+            "runbooks in the operating environment."
         )
     return result
 
@@ -162,9 +162,9 @@ def _mermaid_pie(title: str, data: Counter, limit: int = 10) -> str:
 
 def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
     lines = [
-        f"# Observabilidade — logs, métricas e monitoramento — `{ns_name}`",
+        f"# Observability — logs, metrics, and monitoring — `{ns_name}`",
         "",
-        "## Inventário de monitoramento",
+        "## Monitoring inventory",
         "",
         f"- ServiceMonitors: **{len(obs.service_monitors)}**"
         + (f" (`{', '.join(obs.service_monitors)}`)" if obs.service_monitors else ""),
@@ -173,18 +173,18 @@ def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
         f"- PrometheusRules: **{len(obs.prometheus_rules)}**"
         + (f" (`{', '.join(obs.prometheus_rules)}`)" if obs.prometheus_rules else ""),
         "",
-        "## Gráfico pizza — erros por aplicação/sistema",
+        "## Pie chart — errors by application/system",
         "",
-        _mermaid_pie("Erros por aplicacao", obs.errors_by_app),
+        _mermaid_pie("Errors by application", obs.errors_by_app),
         "",
-        "## Gráfico pizza — erros por categoria",
+        "## Pie chart — errors by category",
         "",
-        _mermaid_pie("Erros por categoria", obs.errors_by_category),
+        _mermaid_pie("Errors by category", obs.errors_by_category),
         "",
-        "## Tabela quantitativa por aplicação",
+        "## Quantitative table by application",
         "",
-        "| Aplicação | Ocorrências | % do total |",
-        "|-----------|-------------|------------|",
+        "| Application | Occurrences | % of total |",
+        "|-------------|-------------|-----------|",
     ]
     total_errors = sum(obs.errors_by_app.values()) or 1
     if obs.errors_by_app:
@@ -194,9 +194,9 @@ def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
     else:
         lines.append("| — | 0 | 0% |")
 
-    lines.extend(["", "## Amostra de evidências em logs", ""])
+    lines.extend(["", "## Sample log evidence", ""])
     if not obs.log_hits:
-        lines.append("Nenhum padrão de erro encontrado nos logs coletados.")
+        lines.append("No error patterns were found in the collected logs.")
         lines.append("")
     else:
         by_app: dict[str, list[LogHit]] = defaultdict(list)
@@ -211,7 +211,7 @@ def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
                 )
             lines.append("")
 
-    lines.extend(["## Oportunidades de melhoria (rastreabilidade e correção)", ""])
+    lines.extend(["## Improvement opportunities (traceability and remediation)", ""])
     for idx, opp in enumerate(obs.opportunities, start=1):
         lines.append(f"{idx}. {opp}")
     lines.append("")

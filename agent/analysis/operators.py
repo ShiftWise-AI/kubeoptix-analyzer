@@ -212,22 +212,22 @@ def _rel_path(ns_root: Path, path: Path) -> str:
 def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
     """Section 2.6 — operators present in the namespace (always as a Markdown table)."""
     lines = [
-        f"### 2.6 Operadores presentes no namespace (ClusterServiceVersions) — `{ns_name}`",
+        f"### 2.6 Operators present in the namespace (ClusterServiceVersions) — `{ns_name}`",
         "",
-        f"CSVs analisados: **{result.scanned}** · listados: **{len(result.items)}**",
+        f"CSVs analyzed: **{result.scanned}** · listed: **{len(result.items)}**",
         "",
         (
-            "| Operador (displayName) | CSV | Versão | Phase | Upgrade disponível | "
-            "Provider | Evidência |"
+            "| Operator (displayName) | CSV | Version | Phase | Upgrade available | "
+            "Provider | Evidence |"
         ),
         (
-            "|------------------------|-----|--------|-------|--------------------|"
-            "----------|-----------|"
+            "|------------------------|-----|---------|-------|-------------------|"
+            "----------|----------|"
         ),
     ]
     if not result.items:
         lines.append(
-            "| — | — | — | — | — | — | Nenhum CSV em `resources/clusterserviceversions*` |"
+            "| — | — | — | — | — | — | No CSVs in `resources/clusterserviceversions*` |"
         )
     else:
         for op in result.items:
@@ -237,18 +237,17 @@ def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
             )
     lines.append("")
     lines.append(
-        "Coluna **Upgrade disponível**: valor da propriedade `status.state` "
-        "(no CSV ou na Subscription OLM correspondente). Exemplos: "
+        "Column **Upgrade available**: value of the `status.state` property "
+        "(in the CSV or corresponding OLM Subscription). Examples: "
         f"`{_STATE_AT_LATEST}`, `{_STATE_UPGRADE_AVAILABLE}`, "
-        "`UpgradePending`, `UpgradeFailed`. Sem `status.state` nos artefatos, "
-        "infere-se pelo `currentCSV` do PackageManifest (canal default); "
-        f"`{_STATE_UNKNOWN}` se não houver evidência."
+        "`UpgradePending`, `UpgradeFailed`. If `status.state` is missing from the artifacts, "
+        "it is inferred from the `currentCSV` in the PackageManifest (default channel); "
+        f"`{_STATE_UNKNOWN}` means no evidence was found."
     )
     lines.append("")
     lines.append(
-        "Os CSVs indicam operadores disponíveis via OLM no escopo coletado; "
-        "não implicam, por si só, ServiceMonitor/PodMonitor/PrometheusRule "
-        "configurados para as aplicações do namespace."
+        "The CSVs indicate operators available via OLM in the collected scope; they do not, by themselves, "
+        "imply that ServiceMonitor/PodMonitor/PrometheusRule resources are configured for the namespace applications."
     )
     lines.append("")
     return "\n".join(lines)

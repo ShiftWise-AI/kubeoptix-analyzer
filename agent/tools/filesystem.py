@@ -116,21 +116,21 @@ def build_filesystem_tools(
         extra = len(matches) - len(shown)
         out = "\n".join(shown)
         if extra > 0:
-            out += f"\n... e mais {extra} arquivos"
+            out += f"\n... and {extra} more files"
         return out
 
     return [
         FunctionTool(
             name="list_artifacts",
             description=(
-                "Lista inventário de namespaces/aplicações (ou conteúdo de um "
-                "subdiretório) sob a pasta de artefatos."
+                "Lists the namespace/application inventory (or the contents of a "
+                "subdirectory) under the artifact folder."
             ),
             parameters=object_schema(
                 {
                     "path": {
                         "type": "string",
-                        "description": "Caminho relativo ao diretório de artefatos (default: .)",
+                        "description": "Relative path under the artifacts directory (default: .)",
                     }
                 }
             ),
@@ -138,16 +138,16 @@ def build_filesystem_tools(
         ),
         FunctionTool(
             name="read_file",
-            description="Lê o conteúdo de um arquivo (YAML ou log), com limite de tamanho.",
+            description="Reads the content of a file (YAML or log) with a size limit.",
             parameters=object_schema(
                 {
                     "path": {
                         "type": "string",
-                        "description": "Caminho relativo ao diretório de artefatos",
+                        "description": "Relative path under the artifacts directory",
                     },
                     "max_chars": {
                         "type": "integer",
-                        "description": "Limite opcional de caracteres a retornar",
+                        "description": "Optional character limit to return",
                     },
                 },
                 required=["path"],
@@ -156,7 +156,7 @@ def build_filesystem_tools(
         ),
         FunctionTool(
             name="find_files",
-            description="Busca arquivos por glob pattern (ex: '**/pod-logs/*.log', '**/deployments/*.yaml').",
+            description="Finds files using a glob pattern (for example: '**/pod-logs/*.log', '**/deployments/*.yaml').",
             parameters=object_schema(
                 {
                     "pattern": {
@@ -165,7 +165,7 @@ def build_filesystem_tools(
                     },
                     "path": {
                         "type": "string",
-                        "description": "Subdiretório relativo para iniciar a busca",
+                        "description": "Relative subdirectory to start the search from",
                     },
                 }
             ),

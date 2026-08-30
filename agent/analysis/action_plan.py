@@ -1,4 +1,4 @@
-"""Plano de ação separado: infraestrutura vs aplicação."""
+"""Action plan separated by infrastructure versus application."""
 
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ def render_action_plan_md(
         s.missing_limits or s.missing_requests for s in resources.by_app.values()
     ):
         infra.append(
-            "- Revisar Quota/LimitRange do namespace e padronizar requests/limits "
-            "em todos os workloads."
+            "- Review the namespace quota/LimitRange and standardize requests/limits "
+            "across all workloads."
         )
 
     missing_req = [
@@ -38,7 +38,7 @@ def render_action_plan_md(
     ]
     if missing_req:
         infra.append(
-            "- Completar requests/limits nas aplicações: "
+            "- Complete requests/limits in the applications: "
             + ", ".join(f"`{a}`" for a in sorted(set(missing_req))[:15])
             + "."
         )
@@ -78,40 +78,40 @@ def render_action_plan_md(
     apps = uniq(apps)
 
     lines = [
-        f"# Plano de ação — `{ns_name}`",
+        f"# Action plan — `{ns_name}`",
         "",
-        "Plano derivado dos relatórios de assessment (achados, recursos, "
-        "observabilidade e ConfigMaps). Separado por responsabilidade.",
+        "Derived from the assessment reports (findings, resources, observability, "
+        "and ConfigMaps). Split by responsibility.",
         "",
-        "## 1. Ações de infraestrutura do cluster / plataforma",
+        "## 1. Cluster / platform infrastructure actions",
         "",
     ]
     if infra:
         lines.extend(infra)
     else:
-        lines.append("- Nenhuma ação de infraestrutura prioritária identificada automaticamente.")
-    lines.extend(["", "## 2. Ações de melhoria da aplicação", ""])
+        lines.append("- No priority infrastructure action was identified automatically.")
+    lines.extend(["", "## 2. Application improvement actions", ""])
     if apps:
         lines.extend(apps)
     else:
-        lines.append("- Nenhuma ação de aplicação prioritária identificada automaticamente.")
+        lines.append("- No priority application action was identified automatically.")
 
     lines.extend(
         [
             "",
-            "## 3. Priorização sugerida",
+            "## 3. Suggested prioritization",
             "",
-            "1. Itens de severidade **ALTO** (TLS, limits, probes, segredos).",
-            "2. Observabilidade (monitores, alertas, logging estruturado).",
-            "3. Itens **MÉDIO/BAIXO** (liveness, réplicas, tags de imagem).",
+            "1. **HIGH** severity items (TLS, limits, probes, secrets).",
+            "2. Observability (monitors, alerts, structured logging).",
+            "3. **MEDIUM/LOW** items (liveness, replicas, image tags).",
             "",
-            "## 4. Critérios de aceite",
+            "## 4. Acceptance criteria",
             "",
-            "- Routes críticas com TLS e sem HTTP inseguro quando aplicável.",
-            "- 100% dos workloads com requests e limits definidos.",
-            "- Aplicações críticas com readiness/liveness e ≥2 réplicas ou HPA.",
-            "- Segredos fora de ConfigMaps; ConfigMaps apenas com configuração não sensível.",
-            "- Métricas e alertas básicos cobrindo taxa de erro e reinícios.",
+            "- Critical Routes with TLS and without insecure HTTP when applicable.",
+            "- 100% of workloads with defined requests and limits.",
+            "- Critical applications with readiness/liveness checks and ≥2 replicas or HPA.",
+            "- Secrets removed from ConfigMaps; ConfigMaps used only for non-sensitive configuration.",
+            "- Basic metrics and alerts covering error rate and restarts.",
             "",
         ]
     )

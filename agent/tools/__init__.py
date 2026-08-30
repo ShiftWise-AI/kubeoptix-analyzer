@@ -21,19 +21,19 @@ def build_report_tools(report: ReportBuilder) -> list[FunctionTool]:
         FunctionTool(
             name="write_report_section",
             description=(
-                "Adiciona ou atualiza uma seção do relatório final de assessment "
-                "(Markdown). Use títulos como 'Resumo executivo', 'Inventário', "
-                "'Achados', 'Análise de logs', 'Recomendações'."
+                "Adds or updates a section in the final assessment report "
+                "(Markdown). Use titles such as 'Executive summary', 'Inventory', "
+                "'Findings', 'Log analysis', and 'Recommendations'."
             ),
             parameters=object_schema(
                 {
                     "title": {
                         "type": "string",
-                        "description": "Título da seção",
+                        "description": "Section title",
                     },
                     "body": {
                         "type": "string",
-                        "description": "Conteúdo Markdown da seção",
+                        "description": "Markdown body for the section",
                     },
                 },
                 required=["title", "body"],

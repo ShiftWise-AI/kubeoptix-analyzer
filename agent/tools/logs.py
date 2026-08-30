@@ -75,7 +75,7 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
             if len(hits) >= max_hits:
                 break
 
-        header = f"Arquivos escaneados: {files_scanned}; hits: {len(hits)}"
+        header = f"Files scanned: {files_scanned}; hits: {len(hits)}"
         if not hits:
             return header + "\nNo error patterns found."
         return header + "\n" + "\n".join(hits)
@@ -84,23 +84,23 @@ def build_log_tools(artifacts_dir: Path) -> list[FunctionTool]:
         FunctionTool(
             name="scan_logs",
             description=(
-                "Escaneia logs de pods por padrões de erro (ERROR, Exception, OOM, "
-                "CrashLoop, timeout, etc.). Aceita path relativo e patterns opcionais."
+                "Scans pod logs for error patterns (ERROR, Exception, OOM, "
+                "CrashLoop, timeout, etc.). Accepts a relative path and optional patterns."
             ),
             parameters=object_schema(
                 {
                     "path": {
                         "type": "string",
-                        "description": "Subdiretório ou arquivo de log (default: .)",
+                        "description": "Log subdirectory or file (default: .)",
                     },
                     "patterns": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Lista opcional de regex; se omitida usa padrões padrão",
+                        "description": "Optional list of regex patterns; if omitted, default patterns are used",
                     },
                     "max_hits": {
                         "type": "integer",
-                        "description": "Máximo de linhas de hit a retornar (default: 50)",
+                        "description": "Maximum number of matching lines to return (default: 50)",
                     },
                 }
             ),

@@ -32,10 +32,10 @@ def _message_content(message: Any) -> str:
 def _fallback_section_texts(locale: str) -> tuple[str, str, str, str]:
     if locale == DEFAULT_LOCALE:
         return (
-            "Resumo do agente",
-            "Notas finais",
-            "Resumo incompleto",
-            "O agente atingiu o limite de iterações antes de concluir a análise.",
+            "Agent summary",
+            "Final notes",
+            "Incomplete summary",
+            "The agent reached the iteration limit before completing the analysis.",
         )
     return (
         "Agent summary",

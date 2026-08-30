@@ -1,230 +1,84 @@
 # kubeoptix-analyzer
 
-Offline analyzer for OpenShift and Kubernetes application artifacts. It reads previously collected manifests, logs, and worker-node inventories, then generates a single Markdown assessment report.
+`kubeoptix-analyzer` is an OpenShift and Kubernetes assessment tool that reads previously collected workload artifacts, inspects their configuration and runtime metadata, and produces a Markdown report with findings, risks, and suggested remediation actions.
 
-Language versions: [PT-BR](README.pt-BR.md) | [Italiano](README.it.md)
+The project is designed for artifact-based analysis rather than live cluster mutation. It expects pre-collected manifests, logs, and worker-node inventory to already exist in a structured directory before execution. The analyzer then reviews workloads, services, routes, ConfigMaps, operators, and observability data to identify configuration and reliability issues.
 
-## Overview
+## Features
 
-This project is the analysis stage of the KubeOptix workflow.
-
-- `kubeoptix-analyzer` connects to a live OpenShift cluster, collects artifacts, removes `Secret` manifests, and anonymizes sensitive values.
-- `kubeoptix-analyzer` consumes those prepared artifacts and produces an assessment report.
-
-The upstream extraction and data-treatment process is documented in the harvester README:
-
-- https://github.com/ShiftWise-AI/kubeoptix-analyzer/blob/main/README.md
-
-According to that document, the artifact pipeline is:
-
-1. Collect worker-node manifests.
-2. Collect namespace resources and pod logs.
-3. Remove YAML files whose `kind` is `Secret`.
-4. Anonymize sensitive patterns in-place, including emails, tokens, certificates, keys, and other secrets.
-
-This analyzer assumes those steps already happened before analysis starts.
+- Parses Kubernetes and OpenShift YAML manifests from collected artifacts.
+- Evaluates workloads, services, routes, ConfigMaps, and operators for configuration risk.
+- Reviews CPU and memory requests/limits, HPA signals, and node capacity.
+- Identifies missing readiness/liveness probes, insecure routes, and common misconfigurations.
+- Scans logs for error patterns and observability gaps.
+- Produces a Markdown assessment report for a namespace or for all discovered namespaces.
+- Runs as a CLI or through an HTTP API in a containerized OpenShift deployment.
 
 ## Requirements
 
 - Python 3.9+
 - Bash
-- An artifact directory produced by `kubeoptix-analyzer` or another compatible collector
+- Helm 3 (for OpenShift deployment)
+- OpenShift or Kubernetes cluster access for artifact collection and deployment
+- A prepared artifact directory containing collected manifests, logs, and node data
+- Optional: `oc` CLI for the Helm/OpenShift installation flow
 
-## Installation
+## Technologies
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
+- Python 3 for the analyzer logic and API
+- OpenShift and Kubernetes manifest parsing
+- Helm chart for deployment in OpenShift
+- Containerfile/OCI image build for runtime packaging
+- HTTP API using Python standard library (`http.server`)
+- `.env`-based configuration for LLM and cursor integrations
+- Git-based image builds and OpenShift `BuildConfig`/`ImageStream` resources
 
-## Helm install on OpenShift
-
-This repository now includes a Helm chart for deploying the analyzer API on OpenShift:
-
-```text
-helm/kubeoptix-analyzer
-```
-
-Install or upgrade:
-
-```bash
-helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
-  --namespace shiftwise-ai \
-  --create-namespace \
-  -f /path/to/values.yaml
-```
-
-Using the project installer (recommended):
-
-```bash
-./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
-```
-
-The installer runs a post-install cleanup step by default. It removes `ConfigMap` resources named `kubeoptix-analyzer-*`, Helm release Secrets named `sh.helm.release.v1*`, legacy user `dockercfg` Secrets, and stale release resources (such as unused `Secret` and cert-manager objects when present).
-
-Cleanup controls:
-
-```bash
-# Disable cleanup
-POST_INSTALL_CLEANUP=false ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
-
-# Keep cleanup enabled but run in dry-run mode
-CLEANUP_DRY_RUN=true ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
-
-# Restrict cleanup to selected kinds
-CLEANUP_TARGET_KINDS=configmap,secret ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
-
-# Use a different prefix for unused ConfigMap removal
-UNUSED_CONFIGMAP_PREFIX=my-release- bash ./cleanup-ocp.sh
-
-# Override the unused Secret name patterns
-UNUSED_SECRET_PATTERNS='sh.helm.release.v1*,shiftwise-ai-user-dockercfg-*' ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
-```
-
-Manual cleanup run:
-
-```bash
-RELEASE=kubeoptix-analyzer NS=shiftwise-ai DRY_RUN=true bash ./cleanup-ocp.sh
-```
-
-Notes:
-
-- Reports are written to `/app/data/reports`.
-- Input artifacts are read from `/app/data/assessment`.
-- The API accepts `POST /run` with a JSON body containing `mode` and one or more `namespaces`.
-- The API exposes `GET /status` with plain-text progress from `0` to `100`.
-- The API exposes `DELETE /reports` to clear the contents of `/app/data/reports`.
-- The chart enforces `replicaCount=1` and fails rendering if set to any other value.
-- The chart can auto-select `storageClassName` (`persistence.storageClassName=auto`): it prefers the default class and falls back to the first available class.
-- If `persistence.existingClaim` is set, the chart uses that PVC directly and does not create a new PVC.
-- The API is exposed internally through a `ClusterIP` Service.
-- The chart creates OpenShift `ImageStream` + `BuildConfig` by default.
-- Default BuildConfig Git source: `https://github.com/ShiftWise-AI/kubeoptix-analyzer.git`.
-- Source authentication uses an existing secret named `github-auth`.
-
-```yaml
-build:
-  enabled: true
-  git:
-    uri: https://github.com/ShiftWise-AI/kubeoptix-analyzer.git
-    ref: feature/default-helm
-    sourceSecret: github-auth
-```
-
-- Analyzer runtime credentials are configured in `secretEnv`. By default the chart creates a secret with `CURSOR_API_KEY`, `CURSOR_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`.
-- To reuse an existing secret for analyzer credentials, set `secretEnv.create=false` and `secretEnv.name=<secret-name>`.
-
-Expected secret format (already available in your namespace):
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: github-auth
-type: kubernetes.io/basic-auth
-stringData:
-  username: x-access-token
-  password: <github-token>
-```
-
-If needed, create it with:
-
-```bash
-oc -n shiftwise-ai create secret generic github-auth \
-  --type=kubernetes.io/basic-auth \
-  --from-literal=username='x-access-token' \
-  --from-literal=password='<github-token>'
-```
-
-## API usage
-
-The API uses the fixed runtime directories:
-
-- `/app/data/assessment`
-- `/app/data/reports`
-
-Run the analysis:
-
-```bash
-curl -k -X POST https://analyzer-shiftwise-ai.apps-crc.testing/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mode": "local",
-    "namespaces": ["openshift-console"]
-  }'
-```
-
-Clear the reports directory:
-
-```bash
-curl -k -X DELETE https://analyzer-shiftwise-ai.apps-crc.testing/reports
-```
-
-## Supported input layout
-
-The analyzer supports both of these layouts:
-
-1. Resource-centric layout:
+## Project Structure
 
 ```text
-<artifacts>/
-  worknodes/
-  <namespace>/
-    resources/
-      deployments.apps/
-      services/
-      routes.route.openshift.io/
-      configmaps/
-      pods/
-      horizontalpodautoscalers.autoscaling/
-      servicemonitors.monitoring.coreos.com/
-      podmonitors.monitoring.coreos.com/
-      prometheusrules.monitoring.coreos.com/
-      clusterserviceversions.operators.coreos.com/
-      subscriptions.operators.coreos.com/
-      packagemanifests.packages.operators.coreos.com/
-    pods-logs/
-```
-
-2. Legacy app-centric layout:
-
-```text
-<artifacts>/
-  <namespace>/
-    apps/
-      <app>/
-        deployments/
-        services/
-        routes/
-        configmaps/
-        hpa/
-        pod-logs/
+.
+├── agent/                     # Assessment logic and analysis modules
+│   ├── analysis/             # Namespace and workload analysis
+│   ├── tools/                # Artifact inspection helpers
+│   ├── __main__.py           # CLI entry point
+│   ├── agent.py              # ReAct orchestration loop
+│   ├── config.py             # Runtime settings
+│   ├── llm.py                # LLM client integration
+│   ├── prompts.py            # System and user prompts
+│   ├── local_analyze.py      # Local offline assessment runner
+│   └── report.py             # Report builder
+├── helm/kubeoptix-analyzer/  # Helm chart for OpenShift deployment
+│   ├── templates/            # Kubernetes manifests
+│   ├── Chart.yaml            # Chart metadata
+│   ├── values.yaml           # Default chart values
+│   └── values.example.yaml   # Example deployment configuration
+├── api.py                    # HTTP service API
+├── Containerfile             # Container image definition
+├── install.sh                # OpenShift install helper
+├── cleanup-ocp.sh            # Post-install cleanup utility
+├── run.sh                    # Local CLI bootstrap script
+├── run-ocp.sh               # Minimal entry script for OpenShift runtime
+├── requirements.txt          # Python dependencies
+├── README.md                 # Project documentation
+├── .env.example              # Example environment config (if present in the repo)
+└── data/                     # Runtime data directory expected at runtime
 ```
 
 ## Configuration
 
-The CLI loads variables from `.env` in the project root.
-
-Example:
+The CLI reads environment settings from `.env` in the project root. The project expects keys such as:
 
 ```dotenv
 CURSOR_API_KEY=
 CURSOR_MODEL=composer-2.5
 
-# Alternative OpenAI-compatible provider
+# Optional OpenAI-compatible provider
 # LLM_API_KEY=
 # LLM_BASE_URL=https://api.openai.com/v1
 # LLM_MODEL=gpt-4o-mini
 ```
 
-LLM mode now validates the `.env` file before running:
-
-- if `.env` does not exist, execution stops with a friendly error
-- if both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, execution stops with a friendly error
-
-Embedded mode uses a local OpenAI-compatible endpoint. Example with Ollama and a quantized Mistral 7B Instruct variant:
+Additional runtime settings may be provided for embedded analysis, for example:
 
 ```dotenv
 EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
@@ -233,30 +87,164 @@ EMBEDDED_MODEL=mistral
 EMBEDDED_TIMEOUT_S=120
 ```
 
-## Report locale
+The Helm chart exposes runtime configuration through `values.yaml`:
 
-The CLI supports report internationalization through `--locale`.
+- `build.enabled` and `build.git.*` for the OpenShift image build
+- `secretEnv.*` for runtime credentials
+- `service.api.*` for the Service definition
+- `persistence.*` for storage configuration
+- `resources.*` for CPU and memory requests/limits
+- `podEnv.*` for environment variables in the workload
 
-Supported values:
+The API runtime directories are fixed:
 
-- `pt-BR` (default)
-- `en-US`
-- `es-ES`
-- `it-IT`
+- `/app/data/assessment`
+- `/app/data/reports`
 
-If `--locale` is omitted, the report is generated in `pt-BR`.
+The `api.py` service accepts a POST request to `/run` with `mode` and `namespaces`, and exposes a `GET /status` endpoint for progress reporting.
 
-## Execution flow
+## Installation
 
-### 1. Prepare or collect artifacts
+Install dependencies for local execution:
 
-Use `kubeoptix-analyzer` first to export cluster data, remove `Secret` manifests, and anonymize sensitive content.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-### 2. Install dependencies
+Deploy to OpenShift with the existing Helm chart:
+
+```bash
+helm upgrade --install kubeoptix-analyzer ./helm/kubeoptix-analyzer \
+  --namespace shiftwise-ai \
+  --create-namespace \
+  -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+The repository also ships with an installer helper:
+
+```bash
+./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
+```
+
+## Helm Configuration
+
+The chart name is `kubeoptix-analyzer` and it deploys the application on OpenShift by creating the following primary resources:
+
+- `StatefulSet` for the analyzer runtime
+- `Service` for the API endpoint
+- `ImageStream` and `BuildConfig` when build automation is enabled
+- optional `Secret` creation for runtime environment variables
+- optional persistent storage when `persistence.enabled` is set
+
+Key values in the chart include:
+
+```yaml
+deploy:
+  enabled: true
+
+service:
+  api:
+    enabled: true
+    name: analyzer-api
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+build:
+  enabled: true
+  registryHost: image-registry.openshift-image-registry.svc:5000
+  imageStreamName: ""
+  outputTag: latest
+  containerfilePath: Containerfile
+  git:
+    uri: ""
+    ref: main
+    sourceSecret: ""
+
+secretEnv:
+  create: false
+  name: ""
+  cursorApiKey: ""
+  cursorModel: composer-2.5
+  llmApiKey: ""
+  llmBaseUrl: https://api.openai.com/v1
+  llmModel: gpt-4o-mini
+```
+
+`install.sh` also supports post-install cleanup options for orphaned OpenShift resources. Those are optional and can be disabled or restricted with environment variables such as `POST_INSTALL_CLEANUP`, `CLEANUP_DRY_RUN`, and `CLEANUP_TARGET_KINDS`.
+
+## Running Locally
+
+The local execution path is driven by the project scripts:
 
 ```bash
 ./run.sh --help
+./run.sh --artifacts ./data/assessment --mode local --report ./data/reports
 ```
+
+The analyzer expects a prepared artifact tree similar to:
+
+```text
+<artifacts>/
+  worknodes/
+  <namespace>/
+    resources/
+    pods-logs/
+```
+
+The output report is written to the selected report path or to the default generated report inside the artifact directory.
+
+## Development
+
+To prepare a development environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Then run the analyzer directly:
+
+```bash
+python -m agent --artifacts ./data/assessment --mode local
+```
+
+The repository does not include a dedicated test suite in the visible project tree, so validation is primarily done through CLI execution, artifact inspection, and deployment checks.
+
+## Container
+
+The project contains a `Containerfile` that builds the analyzer runtime image. The runtime is designed to read artifact directories from `/app/data` and writes generated reports to `/app/data/reports`.
+
+Build the image from the repository root:
+
+```bash
+podman build -t kubeoptix-analyzer .
+```
+
+## Deployment
+
+The application is deployed in OpenShift with the Helm chart under `helm/kubeoptix-analyzer`. The chart creates the runtime workload and service, and it can optionally build the image from source with OpenShift `BuildConfig` and `ImageStream` resources.
+
+The installation flow in `install.sh` performs a two-phase deployment:
+
+1. Deploy build resources and trigger the OpenShift image build.
+2. Deploy the runtime workload and verify the service is healthy.
+
+## Troubleshooting
+
+- If the artifact directory is missing or malformed, the analyzer exits with a clear path error.
+- If `.env` is missing or both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, the runtime stops before the analysis begins.
+- If the Helm installation cannot find the release namespace or build config, verify the namespace exists and the chart was installed with the correct values file.
+- If the application fails health checks, inspect the pod logs and the service proxy status in OpenShift.
+
+## License
+
+No explicit license file was identified in this repository, so no license is documented here.
 
 When you run the wrapper script for the first time, it will:
 
@@ -416,9 +404,3 @@ python -m agent --artifacts ./artifacts --mode local --locale en-US
 - The analyzer is offline with respect to cluster access. It only reads local artifacts.
 - The quality of the report depends on the completeness of the collected artifacts.
 - LLM mode does not replace artifact sanitization. Sensitive-data removal should happen upstream in the harvester pipeline.
-
-## Language versions
-
-- [English](README.md)
-- [PT-BR](README.pt-BR.md)
-- [Italiano](README.it.md)

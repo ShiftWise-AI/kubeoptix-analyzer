@@ -93,7 +93,7 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
                     "host": host,
                     "service": to,
                     "app": target_app,
-                    "tls": "sim" if tls else "não",
+                    "tls": "yes" if tls else "no",
                 }
             )
 
@@ -119,9 +119,9 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
     # Legacy-style textual edges.
     for r in result.routes:
         if r.get("app"):
-            result.edges.append(Edge(f"usuário via {r['host']}", r["app"], "entrada HTTP"))
+            result.edges.append(Edge(f"user via {r['host']}", r["app"], "HTTP entry"))
     for src, dst in result.http_deps:
-        result.edges.append(Edge(src, dst, "chama"))
+        result.edges.append(Edge(src, dst, "calls"))
 
     result.mermaid = _render_mermaid_simple(result)
     result.human_summary = _human_summary(result)
@@ -131,27 +131,27 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
 def _human_summary(topo: TopologyResult) -> list[str]:
     lines: list[str] = []
     if topo.routes:
-        lines.append("**Entrada (usuário → aplicação)**")
+        lines.append("**Entry (user → application)**")
         for r in topo.routes:
-            tls = "com TLS" if r["tls"] == "sim" else "sem TLS"
+            tls = "with TLS" if r["tls"] == "yes" else "without TLS"
             lines.append(
-                f"- Usuário acessa `{r['host']}` ({tls}) e chega na aplicação **{r['app']}**."
+                f"- User accesses `{r['host']}` ({tls}) and reaches application **{r['app']}**."
             )
     else:
-        lines.append("**Entrada:** nenhuma Route encontrada (aplicações só internas ao cluster).")
+        lines.append("**Entry:** no Route found (applications are internal only to the cluster).")
 
     if topo.http_deps:
         lines.append("")
-        lines.append("**Chamadas entre aplicações** (descobertas nos ConfigMaps)")
+        lines.append("**Calls between applications** (discovered in ConfigMaps)")
         for src, dst in topo.http_deps:
-            lines.append(f"- **{src}** chama **{dst}**.")
+            lines.append(f"- **{src}** calls **{dst}**.")
     else:
         lines.append("")
-        lines.append("**Chamadas entre aplicações:** nenhuma URL interna explícita nos ConfigMaps.")
+        lines.append("**Calls between applications:** no explicit internal URL in ConfigMaps.")
 
     if topo.config_refs:
         lines.append("")
-        lines.append("**Configuração injetada nos pods**")
+        lines.append("**Configuration injected into pods**")
         by_app: dict[str, list[str]] = {}
         for app, ref in topo.config_refs:
             by_app.setdefault(app, []).append(ref)
@@ -165,7 +165,7 @@ def _render_mermaid_simple(topo: TopologyResult) -> str:
     """Simple top-to-bottom diagram: user -> apps and apps -> apps."""
     lines = [
         "flowchart TB",
-        '  usuario["Usuario / Internet"]',
+        '  usuario["User / Internet"]',
     ]
     declared: set[str] = {"usuario"}
 
@@ -187,35 +187,35 @@ def _render_mermaid_simple(topo: TopologyResult) -> str:
 
     # App-to-app dependencies.
     for src, dst in topo.http_deps:
-        lines.append(f'  {node(src)} -->|chama| {node(dst)}')
+        lines.append(f'  {node(src)} -->|calls| {node(dst)}')
 
     return "\n".join(lines)
 
 
 def render_topology_md(ns_name: str, topo: TopologyResult) -> str:
     lines = [
-        f"# Arquitetura reversa — `{ns_name}`",
+        f"# Reverse architecture — `{ns_name}`",
         "",
-        "Visão simples reconstruída a partir de **Deployments**, **Services**, "
-        "**Routes** e **ConfigMaps**.",
+        "Simple view reconstructed from **Deployments**, **Services**, "
+        "**Routes**, and **ConfigMaps**.",
         "",
-        "## Em poucas palavras",
+        "## In brief",
         "",
     ]
-    lines.extend(topo.human_summary or ["Não foi possível montar um resumo."])
+    lines.extend(topo.human_summary or ["A summary could not be assembled."])
     lines.extend(
         [
             "",
-            "## Diagrama",
+            "## Diagram",
             "",
             "```mermaid",
             topo.mermaid,
             "```",
             "",
-            "## Entrada pública (Routes)",
+            "## Public entry (Routes)",
             "",
-            "| Host | Aplicação | TLS |",
-            "|------|-----------|-----|",
+            "| Host | Application | TLS |",
+            "|------|-------------|-----|",
         ]
     )
     for r in topo.routes:

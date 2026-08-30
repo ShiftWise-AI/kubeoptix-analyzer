@@ -53,8 +53,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: imagem :latest",
-                            f"Contêiner `{cname}` usa `{image}`.",
+                            f"{app}: :latest image",
+                            f"Container `{cname}` uses `{image}`.",
                             rel,
                             "aplicacao",
                         )
@@ -63,8 +63,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "alto",
-                            f"{app}: sem readinessProbe",
-                            f"Contêiner `{cname}` sem probe de prontidão.",
+                            f"{app}: missing readinessProbe",
+                            f"Container `{cname}` is missing a readiness probe.",
                             rel,
                             "aplicacao",
                         )
@@ -73,8 +73,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: sem livenessProbe",
-                            f"Contêiner `{cname}` sem probe de vitalidade.",
+                            f"{app}: missing livenessProbe",
+                            f"Container `{cname}` is missing a liveness probe.",
                             rel,
                             "aplicacao",
                         )
@@ -83,8 +83,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "alto",
-                            f"{app}: sem resource limits",
-                            f"Contêiner `{cname}` sem limits de CPU/memória.",
+                            f"{app}: missing resource limits",
+                            f"Container `{cname}` is missing CPU/memory limits.",
                             rel,
                             "infraestrutura",
                         )
@@ -93,8 +93,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: sem resource requests",
-                            f"Contêiner `{cname}` sem requests de CPU/memória.",
+                            f"{app}: missing resource requests",
+                            f"Container `{cname}` is missing CPU/memory requests.",
                             rel,
                             "infraestrutura",
                         )
@@ -103,8 +103,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                 result.items.append(
                     Finding(
                         "baixo",
-                        f"{app}: uma única réplica",
-                        f"{kind}/{name} com replicas=1 — risco de indisponibilidade.",
+                        f"{app}: single replica",
+                        f"{kind}/{name} has replicas=1 — availability risk.",
                         rel,
                         "infraestrutura",
                     )
@@ -119,8 +119,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                 result.items.append(
                     Finding(
                         "alto",
-                        f"Route/{name}: sem TLS",
-                        f"Host `{host}` exposto sem TLS.",
+                        f"Route/{name}: missing TLS",
+                        f"Host `{host}` is exposed without TLS.",
                         path.name,
                         "infraestrutura",
                     )
@@ -129,8 +129,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                 result.items.append(
                     Finding(
                         "medio",
-                        f"Route/{name}: HTTP inseguro permitido",
-                        f"Host `{host}` com `insecureEdgeTerminationPolicy=Allow`.",
+                        f"Route/{name}: insecure HTTP allowed",
+                        f"Host `{host}` has `insecureEdgeTerminationPolicy=Allow`.",
                         path.name,
                         "infraestrutura",
                     )
