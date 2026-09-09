@@ -14,6 +14,8 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
+from agent.system_settings import load_runtime_settings
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
@@ -458,6 +460,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 raise ValueError(f"No namespace directories found under {assessment_dir}")
 
             _set_phase("preparing", 8, 12, progress_window_s * 0.6)
+            load_runtime_settings()
 
             base_progress = 12
             final_wrapup_start = 95
@@ -486,6 +489,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     completed = subprocess.run(
                         command,
                         cwd=str(ROOT_DIR),
+                        env=os.environ.copy(),
                         capture_output=True,
                         text=True,
                         timeout=timeout_s,

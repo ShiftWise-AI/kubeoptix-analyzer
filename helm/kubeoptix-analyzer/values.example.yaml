@@ -33,20 +33,13 @@ podEnv:
   HOME: /tmp
   KUBECONFIG: /tmp/kubeconfig
 
+systemSettings:
+  # Platform API exposing GET /system-settings (Quarkus swagger: /q/swagger-ui/)
+  url: "http://shiftwise-backend:8080"
+
 env:
-  TZ: ""
-  ENV: ""
-
-
-secretEnv:
-  create: true
-  name: ""
-  cursorApiKey: ""
-  cursorModel: composer-2.5
-  llmApiKey: ""
-  llmBaseUrl: https://api.openai.com/v1
-  llmModel: gpt-4o-mini
-
+  TZ: UTC
+  LLM_BASE_URL: https://api.openai.com/v1
 
 service:
   api:

@@ -66,13 +66,19 @@ The project is designed for artifact-based analysis rather than live cluster mut
 
 ## Configuration
 
-The CLI reads environment settings from `.env` in the project root. The project expects keys such as:
+In OpenShift, runtime credentials are loaded from the platform API:
+
+- `GET {SYSTEM_SETTINGS_URL}/system-settings`
+- fields used: `cursorApiKey`, `cursorModel`, `llmApiKey`, `llmModel`, `status`
+
+For local development, configure `.env`:
 
 ```dotenv
-CURSOR_API_KEY=
-CURSOR_MODEL=composer-2.5
+SYSTEM_SETTINGS_URL=http://localhost:8000
 
-# Optional OpenAI-compatible provider
+# Optional fallback when SYSTEM_SETTINGS_URL is not set
+# CURSOR_API_KEY=
+# CURSOR_MODEL=composer-2.5
 # LLM_API_KEY=
 # LLM_BASE_URL=https://api.openai.com/v1
 # LLM_MODEL=gpt-4o-mini
@@ -81,7 +87,7 @@ CURSOR_MODEL=composer-2.5
 The Helm chart exposes runtime configuration through `values.yaml`:
 
 - `build.enabled` and `build.git.*` for the OpenShift image build
-- `secretEnv.*` for runtime credentials
+- `systemSettings.url` for the platform System Settings API base URL
 - `service.api.*` for the Service definition
 - `persistence.*` for storage configuration
 - `resources.*` for CPU and memory requests/limits
@@ -155,14 +161,11 @@ build:
     ref: main
     sourceSecret: ""
 
-secretEnv:
-  create: false
-  name: ""
-  cursorApiKey: ""
-  cursorModel: composer-2.5
-  llmApiKey: ""
-  llmBaseUrl: https://api.openai.com/v1
-  llmModel: gpt-4o-mini
+systemSettings:
+  url: "http://shiftwise-backend:8080"
+
+env:
+  LLM_BASE_URL: https://api.openai.com/v1
 ```
 
 `install.sh` also supports post-install cleanup options for orphaned OpenShift resources. Those are optional and can be disabled or restricted with environment variables such as `POST_INSTALL_CLEANUP`, `CLEANUP_DRY_RUN`, and `CLEANUP_TARGET_KINDS`.
@@ -229,7 +232,7 @@ The installation flow in `install.sh` performs a two-phase deployment:
 ## Troubleshooting
 
 - If the artifact directory is missing or malformed, the analyzer exits with a clear path error.
-- If `.env` is missing or both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, the runtime stops before the analysis begins.
+- If `SYSTEM_SETTINGS_URL` is unreachable, returns inactive status, or provides no API keys, the runtime stops before analysis begins.
 - If the Helm installation cannot find the release namespace or build config, verify the namespace exists and the chart was installed with the correct values file.
 - If the application fails health checks, inspect the pod logs and the service proxy status in OpenShift.
 
@@ -260,9 +263,9 @@ Custom report path:
 
 ### 4. How analysis works
 
-- validates that `.env` exists and contains credentials
-- if `CURSOR_API_KEY` is set, uses Cursor SDK
-- otherwise, if `LLM_API_KEY` is set, uses an OpenAI-compatible API and a tool-driven ReAct loop
+- loads credentials from `GET /system-settings` when `SYSTEM_SETTINGS_URL` is configured
+- if `cursorApiKey` is present, uses Cursor SDK
+- otherwise, if `llmApiKey` is present, uses an OpenAI-compatible API and a tool-driven ReAct loop
 - writes a single Markdown report in Brazilian Portuguese to the artifact directory or the path passed with `--report`
 
 ### 5. Review the output
@@ -283,7 +286,7 @@ flowchart TD
     B --> C[Create or reuse .venv]
     C --> D[Install dependencies]
     D --> E[python -m agent]
-    E --> F[Validate .env and credentials]
+    E --> F[Load /system-settings credentials]
     F --> G{Provider}
     G -->|Cursor| H[Cursor SDK prompt over artifact directory]
     G -->|OpenAI-compatible| I[Inventory artifacts and expose local tools]

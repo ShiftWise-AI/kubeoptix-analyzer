@@ -85,7 +85,7 @@ def run_cursor_assessment(
     api_key = os.getenv("CURSOR_API_KEY", "").strip()
     if not api_key:
         raise SystemExit(
-            "CURSOR_API_KEY is not set. Configure it in .env "
+            "CURSOR_API_KEY is not set. Configure SYSTEM_SETTINGS_URL or .env "
             "(https://cursor.com/dashboard/api)."
         )
 

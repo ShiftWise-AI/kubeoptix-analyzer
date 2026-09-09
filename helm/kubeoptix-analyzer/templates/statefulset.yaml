@@ -21,7 +21,6 @@ spec:
       containers:
         - name: kubeoptix-analyzer
           {{- $probes := .Values.probes | default dict }}
-          {{- $secretEnv := .Values.secretEnv | default dict }}
           image: "{{ include "kubeoptix-analyzer.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- if .Values.startup.loginWithServiceAccount }}
@@ -43,11 +42,11 @@ spec:
             {{- end }}
             - name: TZ
               value: {{ .Values.podEnv.TZ | quote }}
-          {{- if or ($secretEnv.create | default false) $secretEnv.name }}
-          envFrom:
-            - secretRef:
-                name: {{ include "kubeoptix-analyzer.secretEnvName" . }}
-          {{- end }}
+            {{- $systemSettings := .Values.systemSettings | default dict }}
+            {{- if $systemSettings.url }}
+            - name: SYSTEM_SETTINGS_URL
+              value: {{ $systemSettings.url | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.api.targetPort }}

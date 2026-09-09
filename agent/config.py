@@ -31,8 +31,8 @@ def validate_llm_env() -> None:
         return
 
     raise SystemExit(
-        "Assessment requires credentials in the environment or in .env. "
-        "Fill one of these options:\n"
+        "Assessment requires credentials from the system settings API or .env. "
+        "Configure SYSTEM_SETTINGS_URL (OpenShift) or fill one of these options:\n"
         "- CURSOR_API_KEY to use Cursor SDK\n"
         "- LLM_API_KEY to use an OpenAI-compatible API\n"
         "See .env.example for the expected format."
