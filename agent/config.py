@@ -23,14 +23,6 @@ class Settings:
     max_file_chars: int = 20_000
 
 
-@dataclass(frozen=True)
-class EmbeddedSettings:
-    api_key: str
-    base_url: str
-    model: str
-    timeout_s: int = 120
-
-
 def validate_llm_env() -> None:
     cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     llm_key = os.getenv("LLM_API_KEY", "").strip()
@@ -39,7 +31,7 @@ def validate_llm_env() -> None:
         return
 
     raise SystemExit(
-        "llm mode requires credentials in the environment or in .env. "
+        "Assessment requires credentials in the environment or in .env. "
         "Fill one of these options:\n"
         "- CURSOR_API_KEY to use Cursor SDK\n"
         "- LLM_API_KEY to use an OpenAI-compatible API\n"
@@ -54,9 +46,10 @@ def get_settings() -> Settings:
         hint = ""
         if cursor_key:
             hint = (
-                "\n\nDetected CURSOR_API_KEY in .env — it does NOT work with --mode llm.\n"
-                "Use --mode local (recommended) or configure LLM_API_KEY from an "
-                "OpenAI-compatible provider (OpenAI, Azure, vLLM, etc.)."
+                "\n\nDetected CURSOR_API_KEY in .env — the OpenAI-compatible ReAct loop "
+                "requires LLM_API_KEY. Use Cursor SDK assessment with CURSOR_API_KEY only, "
+                "or configure LLM_API_KEY from an OpenAI-compatible provider "
+                "(OpenAI, Azure, vLLM, etc.)."
             )
         raise SystemExit(
             "LLM_API_KEY is not set. Configure it in the environment or in .env "
@@ -71,15 +64,4 @@ def get_settings() -> Settings:
         llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
         max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "20")),
         max_file_chars=int(os.getenv("AGENT_MAX_FILE_CHARS", "20000")),
-    )
-
-
-def get_embedded_settings() -> EmbeddedSettings:
-    return EmbeddedSettings(
-        api_key=os.getenv("EMBEDDED_API_KEY", "ollama").strip() or "ollama",
-        base_url=os.getenv("EMBEDDED_BASE_URL", "http://127.0.0.1:11434/v1").rstrip(
-            "/"
-        ),
-        model=os.getenv("EMBEDDED_MODEL", "mistral").strip() or "mistral",
-        timeout_s=int(os.getenv("EMBEDDED_TIMEOUT_S", "120")),
     )

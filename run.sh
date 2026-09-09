@@ -9,12 +9,10 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 usage() {
     cat <<'EOF'
 Usage:
-  ./run.sh --artifacts <diretorio> [--report <arquivo-ou-diretorio>] [--mode local|llm|embedded]
+  ./run.sh --artifacts <diretorio> [--report <arquivo-ou-diretorio>]
 
 Examples:
   ./run.sh --artifacts ./artifacts
-  ./run.sh --artifacts ./artifacts --mode llm
-  ./run.sh --artifacts ./artifacts --mode embedded
 EOF
 }
 

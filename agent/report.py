@@ -6,13 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent.i18n import DEFAULT_LOCALE, translate_markdown
-
 
 @dataclass
 class ReportBuilder:
     artifacts_dir: Path
-    locale: str = DEFAULT_LOCALE
     sections: list[tuple[str, str]] = field(default_factory=list)
 
     def add_section(self, title: str, body: str) -> None:
@@ -51,7 +48,7 @@ class ReportBuilder:
                 lines.append("")
                 lines.append(body)
                 lines.append("")
-            return translate_markdown("\n".join(lines), self.locale)
+        return "\n".join(lines)
 
     def write(self, filename: str = "assessment-report.md") -> Path:
         out = self.artifacts_dir / filename
