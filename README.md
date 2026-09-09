@@ -162,7 +162,7 @@ build:
     sourceSecret: ""
 
 systemSettings:
-  url: "http://shiftwise-backend:8080"
+  url: "http://configurations-api:8000"
 
 env:
   LLM_BASE_URL: https://api.openai.com/v1

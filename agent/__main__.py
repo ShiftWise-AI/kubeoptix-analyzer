@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from agent.config import validate_llm_env
 from agent.local_analyze import resolve_report_path
-from agent.system_settings import load_runtime_settings
+from agent.system_settings import SettingsLoadError, load_runtime_settings
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -40,7 +40,10 @@ def main() -> None:
     artifacts = Path(args.artifacts)
     report = Path(args.report) if args.report else None
 
-    load_runtime_settings()
+    try:
+        load_runtime_settings()
+    except SettingsLoadError as exc:
+        raise SystemExit(str(exc)) from exc
     validate_llm_env()
 
     cursor_key = os.getenv("CURSOR_API_KEY", "").strip()

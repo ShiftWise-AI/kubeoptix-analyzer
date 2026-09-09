@@ -34,8 +34,8 @@ podEnv:
   KUBECONFIG: /tmp/kubeconfig
 
 systemSettings:
-  # Platform API exposing GET /system-settings (Quarkus swagger: /q/swagger-ui/)
-  url: "http://shiftwise-backend:8080"
+  # kubeoptix-configurations service (GET /system-settings)
+  url: "http://configurations-api:8000"
 
 env:
   TZ: UTC

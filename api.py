@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-from agent.system_settings import load_runtime_settings
+from agent.system_settings import SettingsLoadError, load_runtime_settings
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -449,6 +449,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         has_error = False
         reports_dir.mkdir(parents=True, exist_ok=True)
 
+        try:
+            load_runtime_settings()
+        except SettingsLoadError as exc:
+            self._write_json(500, {"error": str(exc)})
+            return
+
         _update_status(progress=0, running=True, phase="preparing")
         _start_progress_tracking()
 
@@ -460,7 +466,6 @@ class ApiHandler(BaseHTTPRequestHandler):
                 raise ValueError(f"No namespace directories found under {assessment_dir}")
 
             _set_phase("preparing", 8, 12, progress_window_s * 0.6)
-            load_runtime_settings()
 
             base_progress = 12
             final_wrapup_start = 95
@@ -562,6 +567,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             _update_status(progress=_snapshot_progress(), phase="error", running=False)
             self._write_json(500, {"error": str(exc)})
         finally:
+            with _STATUS_LOCK:
+                if _STATUS.running:
+                    _STATUS.running = False
             _stop_progress_tracking()
 
 
