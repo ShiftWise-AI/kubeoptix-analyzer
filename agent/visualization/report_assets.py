@@ -10,7 +10,7 @@ from pathlib import Path
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.topology import TopologyResult
 from agent.visualization.kubediagrams import is_kubediagrams_available, render_manifests
-from agent.visualization.markdown import markdown_image
+from agent.visualization.markdown import embedded_markdown_image
 from agent.visualization.models import (
     CompositionDataset,
     DiagramEdge,
@@ -20,7 +20,6 @@ from agent.visualization.models import (
 )
 from agent.visualization.png.assets import safe_asset_filename
 from agent.visualization.png.composition import render_composition_png
-from agent.visualization.png.export_config import WIDE_DIAGRAM_VIZ_IDS
 from agent.visualization.png.flowchart import render_flowchart_png
 
 
@@ -128,7 +127,7 @@ class ReportAssets:
         )
         output = self.output_path(viz_id)
         render_composition_png(dataset, output)
-        return markdown_image(title, self.image_relpath(viz_id))
+        return embedded_markdown_image(title, output)
 
     def render_topology(
         self,
@@ -140,14 +139,13 @@ class ReportAssets:
         """Retorna bloco Markdown da imagem e engine usado (kubediagrams|matplotlib)."""
         output = self.output_path(viz_id)
         manifests = collect_topology_manifests(ns)
-        wide = viz_id in WIDE_DIAGRAM_VIZ_IDS
 
         if manifests and is_kubediagrams_available() and render_manifests(manifests, output):
             self._last_diagram_engine = "kubediagrams"
             lines = [
                 "_Diagrama gerado a partir dos manifests YAML do namespace (KubeDiagrams)._",
                 "",
-                markdown_image(title, self.image_relpath(viz_id), wide=wide),
+                embedded_markdown_image(title, output),
             ]
             return "\n".join(lines), "kubediagrams"
 
@@ -158,6 +156,6 @@ class ReportAssets:
             "_Diagrama simplificado gerado localmente (matplotlib). "
             "Para diagrama completo de arquitetura, instale `kube-diagrams` e Graphviz `dot`._",
             "",
-            markdown_image(title, self.image_relpath(viz_id), wide=wide),
+            embedded_markdown_image(title, output),
         ]
         return "\n".join(lines), "matplotlib"

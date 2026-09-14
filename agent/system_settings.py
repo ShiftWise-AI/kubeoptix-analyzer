@@ -58,15 +58,33 @@ def fetch_system_settings(base_url: str) -> SystemSettings:
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace").strip()
         detail = f": {body}" if body else ""
-        raise SettingsLoadError(
-            f"Failed to load system settings from {url} (HTTP {exc.code}){detail}"
-        ) from exc
+        if _is_container_or_ocp():
+            raise SettingsLoadError(
+                f"Failed to load system settings from {url} (HTTP {exc.code}){detail}"
+            ) from exc
+        print(
+            f"[agent] Warning: system settings unavailable at {url} "
+            f"(HTTP {exc.code}); using .env fallback."
+        )
+        return SystemSettings()
     except urllib.error.URLError as exc:
-        raise SettingsLoadError(
-            f"Failed to reach system settings API at {url}: {exc.reason}"
-        ) from exc
+        if _is_container_or_ocp():
+            raise SettingsLoadError(
+                f"Failed to reach system settings API at {url}: {exc.reason}"
+            ) from exc
+        print(
+            f"[agent] Warning: system settings unreachable at {url} "
+            f"({exc.reason}); using .env fallback."
+        )
+        return SystemSettings()
     except json.JSONDecodeError as exc:
-        raise SettingsLoadError(f"Invalid JSON from system settings API at {url}") from exc
+        if _is_container_or_ocp():
+            raise SettingsLoadError(f"Invalid JSON from system settings API at {url}") from exc
+        print(
+            f"[agent] Warning: invalid JSON from system settings at {url}; "
+            "using .env fallback."
+        )
+        return SystemSettings()
 
     if not isinstance(payload, dict):
         raise SettingsLoadError(f"Unexpected response from system settings API at {url}")
@@ -105,10 +123,16 @@ def load_runtime_settings() -> bool:
             f"System settings status is '{settings.status}', expected 'active'."
         )
 
+    if not settings.llm_api_key and not settings.llm_model:
+        print(
+            f"[agent] System settings at {base_url}/system-settings returned no LLM credentials; "
+            "using .env fallback."
+        )
+        return False
+
     apply_system_settings(settings)
     print(f"[agent] Loaded runtime settings from {base_url}/system-settings")
-    if settings.cursor_api_key:
-        print(f"[agent] Provider: Cursor SDK (model={settings.cursor_model or 'default'})")
-    elif settings.llm_api_key:
-        print(f"[agent] Provider: OpenAI-compatible API (model={settings.llm_model or 'default'})")
+    print(
+        f"[agent] LLM model from system settings: {settings.llm_model or 'default'}"
+    )
     return True

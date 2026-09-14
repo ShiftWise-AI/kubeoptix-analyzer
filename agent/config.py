@@ -24,36 +24,22 @@ class Settings:
 
 
 def validate_llm_env() -> None:
-    cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     llm_key = os.getenv("LLM_API_KEY", "").strip()
-
-    if cursor_key or llm_key:
+    if llm_key:
         return
 
     raise SystemExit(
-        "Assessment requires credentials from the system settings API or .env. "
-        "Configure SYSTEM_SETTINGS_URL (OpenShift) or fill one of these options:\n"
-        "- CURSOR_API_KEY to use Cursor SDK\n"
-        "- LLM_API_KEY to use an OpenAI-compatible API\n"
-        "See .env.example for the expected format."
+        "LLM_API_KEY is required. Configure SYSTEM_SETTINGS_URL (OpenShift) "
+        "or set LLM_API_KEY in .env (see .env.example)."
     )
 
 
 def get_settings() -> Settings:
     api_key = os.getenv("LLM_API_KEY", "").strip()
-    cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     if not api_key:
-        hint = ""
-        if cursor_key:
-            hint = (
-                "\n\nDetected CURSOR_API_KEY in .env — the OpenAI-compatible ReAct loop "
-                "requires LLM_API_KEY. Use Cursor SDK assessment with CURSOR_API_KEY only, "
-                "or configure LLM_API_KEY from an OpenAI-compatible provider "
-                "(OpenAI, Azure, vLLM, etc.)."
-            )
         raise SystemExit(
-            "LLM_API_KEY is not set. Configure it in the environment or in .env "
-            "(see .env.example)." + hint
+            "LLM_API_KEY is not set. Configure it via system settings or in .env "
+            "(see .env.example)."
         )
 
     return Settings(

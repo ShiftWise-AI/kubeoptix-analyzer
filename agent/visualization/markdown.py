@@ -20,12 +20,26 @@ def _normalize_image_path(image_relpath: str) -> str:
     return path
 
 
+def png_to_data_uri(image_path: Path) -> str:
+    """Converte um PNG em data URI base64 para embutir no Markdown."""
+    encoded = base64.standard_b64encode(image_path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def markdown_image(title: str, image_relpath: str, *, wide: bool = False) -> str:
     alt = title.replace("[", "").replace("]", "").replace('"', "")
     path = _normalize_image_path(image_relpath)
     if wide:
         return f"![{alt}]({path}){{ width=100% }}"
     return f"![{alt}]({path})"
+
+
+def embedded_markdown_image(title: str, image_path: Path) -> str:
+    """Retorna Markdown com PNG embutido como stream base64 no corpo do arquivo."""
+    if not image_path.is_file() or image_path.stat().st_size == 0:
+        return "_Visualização indisponível: arquivo de imagem não encontrado._"
+    alt = title.replace("[", "").replace("]", "").replace('"', "")
+    return f"![{alt}]({png_to_data_uri(image_path)})"
 
 
 def resolve_local_image(ref: str, *, search_dirs: tuple[Path, ...]) -> Path | None:
@@ -72,8 +86,7 @@ def embed_markdown_images(
         image_path = resolve_local_image(ref, search_dirs=search_dirs)
         if image_path is None:
             return None
-        encoded = base64.standard_b64encode(image_path.read_bytes()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        return png_to_data_uri(image_path)
 
     def _replace_md(match: re.Match[str]) -> str:
         alt, ref = match.group(1), match.group(2).strip()

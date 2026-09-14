@@ -104,9 +104,7 @@ def format_visualization_catalog(
         return "Nenhuma visualização foi gerada (nenhum namespace encontrado)."
 
     lines = [
-        "As visualizações abaixo já foram renderizadas em PNG em `report_assets/`.",
-        "Inclua os blocos Markdown correspondentes nas seções adequadas do relatório "
-        "(arquitetura, recursos, observabilidade). Não use Mermaid.",
+        "Gráficos e diagramas embutidos como PNG base64 no corpo do relatório.",
         "",
     ]
     for viz in visualizations:

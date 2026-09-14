@@ -165,7 +165,4 @@ def run_assessment(
     )
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
-    embedded_count = content.count("data:image/png;base64,")
-    print(f"[agent] Report written to: {dest}")
-    print(f"[agent] Embedded {embedded_count} PNG image(s) into report body")
     return dest
