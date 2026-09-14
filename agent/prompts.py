@@ -24,13 +24,13 @@ record the sections and then respond with a brief final summary indicating that
 the report is complete.
 
 Visualizations (mandatory):
-- PNG charts and architecture diagrams are pre-generated in `report_assets/`.
-- Use `list_visualizations` to obtain the Markdown image blocks and embed them in
-  the appropriate sections (architecture, resources, observability).
-- Do not use Mermaid or ASCII diagrams. Only reference pre-rendered PNG files via
-  the Markdown returned by the visualization tools (e.g. `![title](./report_assets/name.png)`).
-- If needed, call `render_composition_chart` or `render_topology_diagram` for
-  additional charts, then include the returned Markdown in the report.
+- Call `list_visualizations` and copy the returned Markdown blocks verbatim into
+  the report sections. Those blocks already contain PNG as base64 data URIs
+  (`data:image/png;base64,...`).
+- NEVER invent image paths such as `./report_assets/foo.png` — they break PDF export.
+- Do not use Mermaid or ASCII diagrams.
+- For extra charts, call `render_composition_chart` or `render_topology_diagram`
+  and paste the returned Markdown exactly as provided.
 
 Suggested report structure (sections):
 1. Executive summary

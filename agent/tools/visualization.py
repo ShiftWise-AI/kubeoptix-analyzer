@@ -60,8 +60,8 @@ def build_visualization_tools(
         FunctionTool(
             name="list_visualizations",
             description=(
-                "Lista os blocos Markdown de gráficos e diagramas PNG já gerados "
-                "em report_assets/. Use para incorporar imagens no relatório."
+                "Lista blocos Markdown com PNG embutido em base64 (data URI). "
+                "Copie o texto retornado verbatim para o relatório."
             ),
             parameters=object_schema({}),
             handler=list_visualizations,

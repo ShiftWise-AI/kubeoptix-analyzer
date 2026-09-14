@@ -10,7 +10,11 @@ from agent.analysis.observability import analyze_observability
 from agent.analysis.resources import analyze_resources
 from agent.analysis.topology import analyze_topology
 from agent.analysis.worknodes import discover_worknodes
-from agent.visualization.markdown import embed_markdown_images, strip_unresolvable_image_refs
+from agent.visualization.markdown import (
+    embed_markdown_images,
+    strip_local_image_refs,
+    strip_unresolvable_image_refs,
+)
 from agent.visualization.report_assets import ReportAssets
 
 
@@ -171,28 +175,28 @@ def append_missing_visualizations(
     return updated
 
 
+def sanitize_section_markdown(body: str, *, artifacts_dir: Path) -> str:
+    """Converte PNGs locais em base64 e remove paths relativos inventados pelo LLM."""
+    artifacts_dir = artifacts_dir.resolve()
+    body = strip_unresolvable_image_refs(body, assets_dir=artifacts_dir)
+    body = embed_markdown_images(
+        body,
+        markdown_dir=artifacts_dir,
+        assets_dir=artifacts_dir,
+    )
+    return strip_local_image_refs(body)
+
+
 def finalize_report_markdown(
     content: str,
     *,
     artifacts_dir: Path,
     visualizations: list[NamespaceVisualizations] | None = None,
 ) -> str:
-    """Remove refs quebradas do LLM, injeta visualizações e embute PNGs no Markdown."""
+    """Garante PNGs como stream base64 no corpo do Markdown (compatível com PDF)."""
     artifacts_dir = artifacts_dir.resolve()
-    content = strip_unresolvable_image_refs(content, assets_dir=artifacts_dir)
-    if visualizations:
-        content = append_visualizations_to_markdown(content, visualizations)
-    content = embed_markdown_images(
-        content,
-        markdown_dir=artifacts_dir,
-        assets_dir=artifacts_dir,
-    )
-    # Garantia: se ainda não há PNG embutido, reinjeta e re-embuta.
+    content = sanitize_section_markdown(content, artifacts_dir=artifacts_dir)
     if visualizations and embedded_image_count(content) == 0:
-        content = append_visualizations_to_markdown(content, visualizations)
-        content = embed_markdown_images(
-            content,
-            markdown_dir=artifacts_dir,
-            assets_dir=artifacts_dir,
-        )
-    return content
+        catalog = format_visualization_catalog(visualizations)
+        content = f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
+    return strip_local_image_refs(content)

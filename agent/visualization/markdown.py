@@ -90,16 +90,20 @@ def embed_markdown_images(
 
     def _replace_md(match: re.Match[str]) -> str:
         alt, ref = match.group(1), match.group(2).strip()
+        if ref.startswith("data:image"):
+            return match.group(0)
         data_uri = _encode(ref)
         if data_uri is None:
-            return match.group(0)
+            return ""
         return f"![{alt}]({data_uri})"
 
     def _replace_html(match: re.Match[str]) -> str:
         prefix, ref, suffix = match.group(1), match.group(2).strip(), match.group(3)
+        if ref.startswith("data:image"):
+            return match.group(0)
         data_uri = _encode(ref)
         if data_uri is None:
-            return match.group(0)
+            return ""
         return f"{prefix}{data_uri}{suffix}"
 
     embedded = _MD_IMAGE_RE.sub(_replace_md, content)
@@ -128,6 +132,30 @@ def strip_unresolvable_image_refs(
         if resolve_local_image(ref, search_dirs=(assets_dir.resolve(),)) is None:
             return ""
         return match.group(0)
+
+    cleaned = _MD_IMAGE_RE.sub(_replace_md, content)
+    cleaned = _HTML_IMG_RE.sub(_replace_html, cleaned)
+    return re.sub(r"\n{3,}", "\n\n", cleaned)
+
+
+def strip_local_image_refs(content: str) -> str:
+    """Remove imagens locais não embutidas (paths relativos que o PDF não resolve)."""
+
+    def _replace_md(match: re.Match[str]) -> str:
+        ref = match.group(2).strip()
+        if ref.startswith("data:image"):
+            return match.group(0)
+        if ref.startswith(("http://", "https://")):
+            return match.group(0)
+        return ""
+
+    def _replace_html(match: re.Match[str]) -> str:
+        ref = match.group(2).strip()
+        if ref.startswith("data:image"):
+            return match.group(0)
+        if ref.startswith(("http://", "https://")):
+            return match.group(0)
+        return ""
 
     cleaned = _MD_IMAGE_RE.sub(_replace_md, content)
     cleaned = _HTML_IMG_RE.sub(_replace_html, cleaned)
