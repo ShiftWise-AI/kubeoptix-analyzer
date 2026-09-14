@@ -78,6 +78,7 @@ def run_cursor_assessment(
         ) from exc
 
     from agent.local_analyze import resolve_report_path
+    from agent.visualization.markdown import embed_markdown_images
     from agent.visualization.pregenerate import (
         format_visualization_catalog,
         generate_all_visualizations,
@@ -150,5 +151,11 @@ def run_cursor_assessment(
             )
     else:
         print(f"[agent] Report generated at: {out}")
+
+    content = out.read_text(encoding="utf-8")
+    embedded = embed_markdown_images(content, markdown_dir=out.parent)
+    if embedded != content:
+        out.write_text(embedded, encoding="utf-8")
+        print(f"[agent] Embedded PNG images into report body")
 
     return out

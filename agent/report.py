@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.visualization.markdown import embed_markdown_images
+
 
 @dataclass
 class ReportBuilder:
@@ -52,5 +54,6 @@ class ReportBuilder:
 
     def write(self, filename: str = "assessment-report.md") -> Path:
         out = self.artifacts_dir / filename
-        out.write_text(self.render(), encoding="utf-8")
+        content = embed_markdown_images(self.render(), markdown_dir=self.artifacts_dir)
+        out.write_text(content, encoding="utf-8")
         return out

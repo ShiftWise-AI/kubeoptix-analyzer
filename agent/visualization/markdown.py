@@ -7,6 +7,10 @@ import re
 from pathlib import Path
 
 _MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)(?:\{[^}]*\})?")
+_HTML_IMG_RE = re.compile(
+    r'(<img\s[^>]*src=")([^"]+)("[^>]*>)',
+    re.IGNORECASE,
+)
 
 
 def _normalize_image_path(image_relpath: str) -> str:
@@ -44,4 +48,12 @@ def embed_markdown_images(content: str, *, markdown_dir: Path) -> str:
             return match.group(0)
         return f"![{alt}]({data_uri})"
 
-    return _MD_IMAGE_RE.sub(_replace_md, content)
+    def _replace_html(match: re.Match[str]) -> str:
+        prefix, ref, suffix = match.group(1), match.group(2).strip(), match.group(3)
+        data_uri = _encode(ref)
+        if data_uri is None:
+            return match.group(0)
+        return f"{prefix}{data_uri}{suffix}"
+
+    embedded = _MD_IMAGE_RE.sub(_replace_md, content)
+    return _HTML_IMG_RE.sub(_replace_html, embedded)
