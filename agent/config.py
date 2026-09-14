@@ -24,13 +24,18 @@ class Settings:
 
 
 def validate_llm_env() -> None:
+    cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     llm_key = os.getenv("LLM_API_KEY", "").strip()
-    if llm_key:
+
+    if cursor_key or llm_key:
         return
 
     raise SystemExit(
-        "LLM_API_KEY is required. Configure SYSTEM_SETTINGS_URL (OpenShift) "
-        "or set LLM_API_KEY in .env (see .env.example)."
+        "Assessment requires credentials from the system settings API or .env. "
+        "Configure SYSTEM_SETTINGS_URL (OpenShift) or set one of:\n"
+        "- CURSOR_API_KEY (Cursor SDK)\n"
+        "- LLM_API_KEY (OpenAI-compatible API)\n"
+        "See .env.example for the expected format."
     )
 
 

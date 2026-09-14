@@ -1,4 +1,4 @@
-"""CLI: python -m agent --llm --artifacts ./folder [--report path]."""
+"""CLI: python -m agent --artifacts ./folder [--report path] [--llm]."""
 
 from __future__ import annotations
 
@@ -16,9 +16,21 @@ _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
 
+def _report_stats(path: Path) -> None:
+    content = path.read_text(encoding="utf-8")
+    embedded = content.count("data:image/png;base64,")
+    relative = len(re.findall(r"!\[[^\]]*\]\([^)]*report_assets[^)]*\)", content))
+    print(f"[agent] Report written to: {path}")
+    print(f"[agent] Embedded {embedded} PNG image(s) in markdown body")
+    if relative:
+        print(f"[agent] Warning: {relative} unembedded image reference(s) remain")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OpenShift assessment via OpenAI-compatible LLM (ReAct + tools)."
+        description=(
+            "OpenShift assessment via Cursor SDK or OpenAI-compatible LLM (ReAct + tools)."
+        )
     )
     parser.add_argument(
         "--artifacts",
@@ -38,8 +50,7 @@ def main() -> None:
     parser.add_argument(
         "--llm",
         action="store_true",
-        required=True,
-        help="Run assessment with OpenAI-compatible LLM API",
+        help="Force OpenAI-compatible LLM API (requires LLM_API_KEY)",
     )
     args = parser.parse_args()
 
@@ -52,27 +63,46 @@ def main() -> None:
         raise SystemExit(str(exc)) from exc
     validate_llm_env()
 
+    cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     openai_key = os.getenv("LLM_API_KEY", "").strip()
-    if not openai_key:
-        raise SystemExit(
-            "--llm requires LLM_API_KEY (configure via SYSTEM_SETTINGS_URL or .env)."
-        )
 
-    from agent.agent import run_assessment
-    from agent.config import get_settings
+    if args.llm:
+        if not openai_key:
+            raise SystemExit(
+                "--llm requires LLM_API_KEY (configure via SYSTEM_SETTINGS_URL or .env)."
+            )
+        from agent.agent import run_assessment
+        from agent.config import get_settings
 
-    settings = get_settings()
-    print("[agent] Provider: OpenAI-compatible API (--llm)")
-    print(f"[agent] Model: {settings.llm_model}")
-    out = run_assessment(artifacts, settings, report_path=report)
+        settings = get_settings()
+        print("[agent] Provider: OpenAI-compatible API (--llm)")
+        print(f"[agent] Model: {settings.llm_model}")
+        out = run_assessment(artifacts, settings, report_path=report)
+        _report_stats(out)
+        return
 
-    content = out.read_text(encoding="utf-8")
-    embedded = content.count("data:image/png;base64,")
-    relative = len(re.findall(r"!\[[^\]]*\]\([^)]*report_assets[^)]*\)", content))
-    print(f"[agent] Report written to: {out}")
-    print(f"[agent] Embedded {embedded} PNG image(s) in markdown body")
-    if relative:
-        print(f"[agent] Warning: {relative} unembedded image reference(s) remain")
+    if cursor_key:
+        from agent.cursor_assess import run_cursor_assessment
+
+        out = run_cursor_assessment(artifacts, report)
+        _report_stats(out)
+        return
+
+    if openai_key:
+        from agent.agent import run_assessment
+        from agent.config import get_settings
+
+        settings = get_settings()
+        print("[agent] Provider: OpenAI-compatible API")
+        print(f"[agent] Model: {settings.llm_model}")
+        out = run_assessment(artifacts, settings, report_path=report)
+        _report_stats(out)
+        return
+
+    raise SystemExit(
+        "Could not start analysis: no credentials available.\n"
+        "Configure CURSOR_API_KEY or LLM_API_KEY via system settings or .env."
+    )
 
 
 if __name__ == "__main__":

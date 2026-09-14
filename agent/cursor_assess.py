@@ -158,9 +158,11 @@ def run_cursor_assessment(
         report_dir=out.parent,
         visualizations=visualizations,
     )
-    if final != content:
-        out.write_text(final, encoding="utf-8")
-        embedded_count = final.count("data:image/png;base64,")
-        print(f"[agent] Embedded {embedded_count} PNG image(s) into report body")
+    out.write_text(final, encoding="utf-8")
+    embedded_count = final.count("data:image/png;base64,")
+    print(f"[agent] Embedded {embedded_count} PNG image(s) into report body")
 
+    from agent.visualization.report_postprocess import cleanup_stray_report_scripts
+
+    cleanup_stray_report_scripts(out.parent)
     return out

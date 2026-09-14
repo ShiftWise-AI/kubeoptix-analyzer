@@ -123,16 +123,27 @@ def load_runtime_settings() -> bool:
             f"System settings status is '{settings.status}', expected 'active'."
         )
 
-    if not settings.llm_api_key and not settings.llm_model:
+    if not (
+        settings.cursor_api_key
+        or settings.cursor_model
+        or settings.llm_api_key
+        or settings.llm_model
+    ):
         print(
-            f"[agent] System settings at {base_url}/system-settings returned no LLM credentials; "
+            f"[agent] System settings at {base_url}/system-settings returned no credentials; "
             "using .env fallback."
         )
         return False
 
     apply_system_settings(settings)
     print(f"[agent] Loaded runtime settings from {base_url}/system-settings")
-    print(
-        f"[agent] LLM model from system settings: {settings.llm_model or 'default'}"
-    )
+    if settings.cursor_api_key:
+        print(
+            f"[agent] Provider: Cursor SDK (model={settings.cursor_model or 'default'})"
+        )
+    elif settings.llm_api_key:
+        print(
+            f"[agent] Provider: OpenAI-compatible API "
+            f"(model={settings.llm_model or 'default'})"
+        )
     return True
