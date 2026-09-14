@@ -44,7 +44,4 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
-{{- define "kubeoptix-analyzer.secretEnvName" -}}
-{{- default (printf "%s-env" (include "kubeoptix-analyzer.fullname" .)) .Values.secretEnv.name -}}
-{{- end -}}
 

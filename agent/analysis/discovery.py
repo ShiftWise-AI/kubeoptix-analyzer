@@ -41,6 +41,57 @@ def _glob_resource_dirs(resources: Path, *names: str) -> list[Path]:
     return files
 
 
+def _path_layout_priority(path: Path) -> int:
+    """Prefer canonical resources/ layout over legacy apps/ duplicates."""
+    parts = path.parts
+    if "resources" in parts:
+        return 0
+    if "apps" in parts:
+        return 1
+    return 2
+
+
+def _resource_identity(path: Path) -> tuple[str, str] | None:
+    docs = load_yaml_docs(path)
+    if not docs:
+        return None
+    doc = docs[0]
+    kind = str(doc.get("kind") or "")
+    name = meta_name(doc)
+    if not kind or not name:
+        return None
+    return (kind, name)
+
+
+def _dedupe_resource_paths(paths: list[Path]) -> list[Path]:
+    """Drop duplicate manifests collected from both resources/ and apps/ layouts."""
+    by_key: dict[tuple[str, str], Path] = {}
+    order: list[tuple[str, str]] = []
+    for path in paths:
+        key = _resource_identity(path) or ("__path__", str(path.resolve()))
+        if key not in by_key:
+            by_key[key] = path
+            order.append(key)
+            continue
+        if _path_layout_priority(path) < _path_layout_priority(by_key[key]):
+            by_key[key] = path
+    return [by_key[key] for key in order]
+
+
+def _dedupe_log_paths(paths: list[Path]) -> list[Path]:
+    by_name: dict[str, Path] = {}
+    order: list[str] = []
+    for path in paths:
+        name = path.name
+        if name not in by_name:
+            by_name[name] = path
+            order.append(name)
+            continue
+        if _path_layout_priority(path) < _path_layout_priority(by_name[name]):
+            by_name[name] = path
+    return [by_name[name] for name in order]
+
+
 def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
     ns = NamespaceArtifacts(name=name, root=root)
     resources = root / "resources"
@@ -118,7 +169,7 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
                 files = [f for f in files if f.is_file()]
                 getattr(ns, attr).extend(files)
 
-    # Deduplicate paths.
+    # Deduplicate paths (same file) and resource manifests (resources/ + apps/).
     for attr in (
         "deployments",
         "services",
@@ -126,7 +177,6 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         "configmaps",
         "pods",
         "hpas",
-        "log_files",
         "service_monitors",
         "pod_monitors",
         "prometheus_rules",
@@ -134,14 +184,8 @@ def _discover_namespace_root(root: Path, name: str) -> NamespaceArtifacts:
         "subscriptions",
         "packagemanifests",
     ):
-        seen: set[Path] = set()
-        unique: list[Path] = []
-        for p in getattr(ns, attr):
-            rp = p.resolve()
-            if rp not in seen:
-                seen.add(rp)
-                unique.append(p)
-        setattr(ns, attr, unique)
+        setattr(ns, attr, _dedupe_resource_paths(getattr(ns, attr)))
+    ns.log_files = _dedupe_log_paths(ns.log_files)
 
     return ns
 

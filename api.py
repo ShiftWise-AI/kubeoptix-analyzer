@@ -14,20 +14,15 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
+from agent.system_settings import SettingsLoadError, load_runtime_settings
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
 
-ALLOWED_MODES = {"local", "llm", "embedded"}
 DEFAULT_ASSESSMENT_DIR = Path("data/assessment")
 DEFAULT_REPORTS_DIR = Path("/app/data/reports")
 WORKNODES_DIRNAME = "worknodes"
-EMBEDDED_DISABLED_MSG = (
-    "Embedded mode is not available in container or OpenShift environments yet."
-)
-INVALID_MODE_MSG = (
-    "Request body must include a valid 'mode'. Allowed values: embedded, llm, local."
-)
 INVALID_NAMESPACES_MSG = (
     "Request body must include 'namespaces' with one or more namespace names."
 )
@@ -51,7 +46,7 @@ _STATUS_STOP_EVENT: threading.Event | None = None
 _STATUS_WORKER: threading.Thread | None = None
 
 
-def _build_command(mode: str, namespace_dir: Path, report_file: Path) -> list[str]:
+def _build_command(namespace_dir: Path, report_file: Path) -> list[str]:
     script_value = os.getenv("KUBEOPTIX_RUN_SCRIPT", "run-ocp.sh").strip()
     script_path = (ROOT_DIR / script_value).resolve() if not Path(script_value).is_absolute() else Path(script_value)
 
@@ -63,26 +58,11 @@ def _build_command(mode: str, namespace_dir: Path, report_file: Path) -> list[st
         str(script_path),
         "--artifacts",
         str(namespace_dir),
-        "--mode",
-        mode,
         "--report",
         str(report_file),
     ]
 
-    locale = os.getenv("KUBEOPTIX_LOCALE", "").strip()
-    if locale:
-        command.extend(["--locale", locale])
-
     return command
-
-
-def _resolve_mode(mode_value: object) -> str:
-    mode = str(mode_value or "").strip().lower()
-    if not mode:
-        raise ValueError(INVALID_MODE_MSG)
-    if mode not in ALLOWED_MODES:
-        raise ValueError(INVALID_MODE_MSG)
-    return mode
 
 
 def _resolve_namespaces(namespaces_value: object) -> list[str]:
@@ -111,14 +91,6 @@ def _select_namespace_dirs(namespace_dirs: list[Path], namespace_names: list[str
             f"Namespaces not found: {missing_list}. Available namespaces: {available}"
         )
     return [by_name[name] for name in namespace_names]
-
-
-def _is_container_or_ocp() -> bool:
-    if os.getenv("KUBERNETES_SERVICE_HOST"):
-        return True
-    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
-        return True
-    return False
 
 
 def _resolve_assessment_dir() -> Path:
@@ -299,14 +271,6 @@ def _list_assessment_folder_names(assessment_dir: Path) -> list[str]:
     return folder_names
 
 
-def _report_suffix_for_mode(mode: str) -> str:
-    if mode == "local":
-        return "-local"
-    if mode == "llm":
-        return "-llm"
-    return ""
-
-
 def _resolve_file_created_at(path: Path) -> datetime:
     stat_result = path.stat()
     created_ts = getattr(stat_result, "st_birthtime", None)
@@ -449,17 +413,12 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         try:
             request_payload = self._read_json_body()
-            mode_value = request_payload.get("mode", request_payload.get("--mode"))
             namespaces_value = request_payload.get(
                 "namespaces",
                 request_payload.get("--namespaces"),
             )
 
-            mode = _resolve_mode(mode_value)
             namespace_names = _resolve_namespaces(namespaces_value)
-
-            if mode == "embedded" and _is_container_or_ocp():
-                raise ValueError(EMBEDDED_DISABLED_MSG)
 
             assessment_dir = _resolve_assessment_dir()
             reports_dir = _resolve_reports_dir()
@@ -490,6 +449,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         has_error = False
         reports_dir.mkdir(parents=True, exist_ok=True)
 
+        try:
+            load_runtime_settings()
+        except SettingsLoadError as exc:
+            self._write_json(500, {"error": str(exc)})
+            return
+
         _update_status(progress=0, running=True, phase="preparing")
         _start_progress_tracking()
 
@@ -513,11 +478,10 @@ class ApiHandler(BaseHTTPRequestHandler):
             for index, namespace_dir in enumerate(namespace_dirs):
                 namespace_span = per_namespace + (1 if index < remainder else 0)
                 namespace_end = current_start + namespace_span
-                report_suffix = _report_suffix_for_mode(mode)
-                report_file = reports_dir / f"{namespace_dir.name}{report_suffix}.md"
+                report_file = reports_dir / f"{namespace_dir.name}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
 
-                command = _build_command(mode, namespace_dir, report_file)
+                command = _build_command(namespace_dir, report_file)
 
                 _set_phase(
                     f"analyzing {namespace_dir.name}",
@@ -530,6 +494,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     completed = subprocess.run(
                         command,
                         cwd=str(ROOT_DIR),
+                        env=os.environ.copy(),
                         capture_output=True,
                         text=True,
                         timeout=timeout_s,
@@ -588,7 +553,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             _update_status(progress=100, phase="done", running=False)
 
             payload = {
-                "mode": mode,
                 "namespaces": [ns.name for ns in namespace_dirs],
                 "assessment_dir": str(assessment_dir),
                 "reports_dir": str(reports_dir),
@@ -603,6 +567,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             _update_status(progress=_snapshot_progress(), phase="error", running=False)
             self._write_json(500, {"error": str(exc)})
         finally:
+            with _STATUS_LOCK:
+                if _STATUS.running:
+                    _STATUS.running = False
             _stop_progress_tracking()
 
 

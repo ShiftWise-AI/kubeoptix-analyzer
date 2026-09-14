@@ -33,20 +33,13 @@ podEnv:
   HOME: /tmp
   KUBECONFIG: /tmp/kubeconfig
 
+systemSettings:
+  # kubeoptix-configurations service (GET /system-settings)
+  url: "http://configurations-api:8000"
+
 env:
-  TZ: ""
-  ENV: ""
-
-
-secretEnv:
-  create: true
-  name: ""
-  cursorApiKey: ""
-  cursorModel: composer-2.5
-  llmApiKey: ""
-  llmBaseUrl: https://api.openai.com/v1
-  llmModel: gpt-4o-mini
-
+  TZ: UTC
+  LLM_BASE_URL: https://api.openai.com/v1
 
 service:
   api:

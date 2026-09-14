@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from agent.i18n import get_locale_spec
-
-SYSTEM_PROMPT_TEMPLATE = """\
+SYSTEM_PROMPT = """\
 You are an OpenShift/Kubernetes specialist responsible for application assessment.
 
 Context: artifacts have already been collected from a cluster (YAML manifests and pod logs),
 and sanitized (secrets removed). Your task is to analyze these artifacts and produce
-an actionable assessment report in {locale_name}.
+an actionable assessment report in Brazilian Portuguese (português do Brasil).
 
 Focus on:
 - Namespace and application inventory
@@ -34,16 +32,14 @@ Suggested report structure (sections):
 """
 
 
-def build_system_prompt(locale: str) -> str:
-    spec = get_locale_spec(locale)
-    return SYSTEM_PROMPT_TEMPLATE.format(locale_name=spec.markdown_language_name)
+def build_system_prompt() -> str:
+    return SYSTEM_PROMPT
 
 
-def build_user_prompt(artifacts_dir: str, inventory: str, locale: str) -> str:
-    spec = get_locale_spec(locale)
+def build_user_prompt(artifacts_dir: str, inventory: str) -> str:
     return (
         f"Artifacts directory: {artifacts_dir}\n\n"
         f"Initial inventory:\n{inventory}\n\n"
         "Analyze the artifacts, use the tools as needed, and build the full "
-        f"assessment report in {spec.markdown_language_name}."
+        "assessment report in Brazilian Portuguese (português do Brasil)."
     )

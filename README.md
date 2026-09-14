@@ -45,7 +45,7 @@ The project is designed for artifact-based analysis rather than live cluster mut
 │   ├── config.py             # Runtime settings
 │   ├── llm.py                # LLM client integration
 │   ├── prompts.py            # System and user prompts
-│   ├── local_analyze.py      # Local offline assessment runner
+│   ├── local_analyze.py      # Report path helpers and legacy local analysis modules
 │   └── report.py             # Report builder
 ├── helm/kubeoptix-analyzer/  # Helm chart for OpenShift deployment
 │   ├── templates/            # Kubernetes manifests
@@ -66,31 +66,28 @@ The project is designed for artifact-based analysis rather than live cluster mut
 
 ## Configuration
 
-The CLI reads environment settings from `.env` in the project root. The project expects keys such as:
+In OpenShift, runtime credentials are loaded from the platform API:
+
+- `GET {SYSTEM_SETTINGS_URL}/system-settings`
+- fields used: `cursorApiKey`, `cursorModel`, `llmApiKey`, `llmModel`, `status`
+
+For local development, configure `.env`:
 
 ```dotenv
-CURSOR_API_KEY=
-CURSOR_MODEL=composer-2.5
+SYSTEM_SETTINGS_URL=http://localhost:8000
 
-# Optional OpenAI-compatible provider
+# Optional fallback when SYSTEM_SETTINGS_URL is not set
+# CURSOR_API_KEY=
+# CURSOR_MODEL=composer-2.5
 # LLM_API_KEY=
 # LLM_BASE_URL=https://api.openai.com/v1
 # LLM_MODEL=gpt-4o-mini
 ```
 
-Additional runtime settings may be provided for embedded analysis, for example:
-
-```dotenv
-EMBEDDED_BASE_URL=http://127.0.0.1:11434/v1
-EMBEDDED_API_KEY=ollama
-EMBEDDED_MODEL=mistral
-EMBEDDED_TIMEOUT_S=120
-```
-
 The Helm chart exposes runtime configuration through `values.yaml`:
 
 - `build.enabled` and `build.git.*` for the OpenShift image build
-- `secretEnv.*` for runtime credentials
+- `systemSettings.url` for the platform System Settings API base URL
 - `service.api.*` for the Service definition
 - `persistence.*` for storage configuration
 - `resources.*` for CPU and memory requests/limits
@@ -101,7 +98,7 @@ The API runtime directories are fixed:
 - `/app/data/assessment`
 - `/app/data/reports`
 
-The `api.py` service accepts a POST request to `/run` with `mode` and `namespaces`, and exposes a `GET /status` endpoint for progress reporting.
+The `api.py` service accepts a POST request to `/run` with `namespaces`, and exposes a `GET /status` endpoint for progress reporting.
 
 ## Installation
 
@@ -164,14 +161,11 @@ build:
     ref: main
     sourceSecret: ""
 
-secretEnv:
-  create: false
-  name: ""
-  cursorApiKey: ""
-  cursorModel: composer-2.5
-  llmApiKey: ""
-  llmBaseUrl: https://api.openai.com/v1
-  llmModel: gpt-4o-mini
+systemSettings:
+  url: "http://configurations-api:8000"
+
+env:
+  LLM_BASE_URL: https://api.openai.com/v1
 ```
 
 `install.sh` also supports post-install cleanup options for orphaned OpenShift resources. Those are optional and can be disabled or restricted with environment variables such as `POST_INSTALL_CLEANUP`, `CLEANUP_DRY_RUN`, and `CLEANUP_TARGET_KINDS`.
@@ -182,7 +176,7 @@ The local execution path is driven by the project scripts:
 
 ```bash
 ./run.sh --help
-./run.sh --artifacts ./data/assessment --mode local --report ./data/reports
+./run.sh --artifacts ./data/assessment --report ./data/reports
 ```
 
 The analyzer expects a prepared artifact tree similar to:
@@ -211,7 +205,7 @@ python -m pip install -r requirements.txt
 Then run the analyzer directly:
 
 ```bash
-python -m agent --artifacts ./data/assessment --mode local
+python -m agent --artifacts ./data/assessment
 ```
 
 The repository does not include a dedicated test suite in the visible project tree, so validation is primarily done through CLI execution, artifact inspection, and deployment checks.
@@ -238,7 +232,7 @@ The installation flow in `install.sh` performs a two-phase deployment:
 ## Troubleshooting
 
 - If the artifact directory is missing or malformed, the analyzer exits with a clear path error.
-- If `.env` is missing or both `CURSOR_API_KEY` and `LLM_API_KEY` are empty, the runtime stops before the analysis begins.
+- If `SYSTEM_SETTINGS_URL` is unreachable, returns inactive status, or provides no API keys, the runtime stops before analysis begins.
 - If the Helm installation cannot find the release namespace or build config, verify the namespace exists and the chart was installed with the correct values file.
 - If the application fails health checks, inspect the pod logs and the service proxy status in OpenShift.
 
@@ -257,30 +251,8 @@ When you run the wrapper script for the first time, it will:
 
 ### 3. Run the analyzer
 
-Local mode:
-
 ```bash
 ./run.sh --artifacts ./artifacts
-```
-
-LLM mode:
-
-```bash
-./run.sh --artifacts ./artifacts --mode llm
-```
-
-Embedded mode:
-
-```bash
-./run.sh --artifacts ./artifacts --mode embedded
-```
-
-Custom locale:
-
-```bash
-./run.sh --artifacts ./artifacts --mode local --locale en-US
-./run.sh --artifacts ./artifacts --mode embedded --locale es-ES
-./run.sh --artifacts ./artifacts --mode llm --locale it-IT
 ```
 
 Custom report path:
@@ -289,32 +261,12 @@ Custom report path:
 ./run.sh --artifacts ./artifacts --report ./out/assessment-report.md
 ```
 
-### 4. Choose the analysis mode
+### 4. How analysis works
 
-`local`
-
-- deterministic analysis without external LLM calls
-- scans manifests, routes, services, ConfigMaps, logs, operators, HPAs, and worker-node capacity
-- writes one Markdown report directly from local heuristics
-- translates the final Markdown to the locale selected with `--locale`
-
-`llm`
-
-- validates that `.env` exists and contains credentials
-- if `CURSOR_API_KEY` is set, uses Cursor SDK
-- otherwise, if `LLM_API_KEY` is set, uses an OpenAI-compatible API and a tool-driven ReAct loop
-- writes a single Markdown report to the artifact directory or the path passed with `--report`
-- instructs the model to answer in the locale selected with `--locale`
-
-`embedded`
-
-- runs the deterministic local analysis first
-- computes heuristic classification + reranking of findings
-- clusters repeated log errors by normalized signature
-- scores workload risk using findings, logs, QoS, missing limits/requests, and replica posture
-- detects requests/limits outliers with IQR-based analysis
-- sends only the compact evidence summary to a local OpenAI-compatible model such as Ollama + Mistral
-- translates the final Markdown to the locale selected with `--locale`
+- loads credentials from `GET /system-settings` when `SYSTEM_SETTINGS_URL` is configured
+- if `cursorApiKey` is present, uses Cursor SDK
+- otherwise, if `llmApiKey` is present, uses an OpenAI-compatible API and a tool-driven ReAct loop
+- writes a single Markdown report in Brazilian Portuguese to the artifact directory or the path passed with `--report`
 
 ### 5. Review the output
 
@@ -334,28 +286,16 @@ flowchart TD
     B --> C[Create or reuse .venv]
     C --> D[Install dependencies]
     D --> E[python -m agent]
-    E --> F{Mode}
-
-    F -->|local| G[Discover namespaces and worknodes]
-    G --> H[Parse YAML manifests and logs]
-    H --> I[Run local analysis modules]
-    I --> J[Write assessment-report.md]
-
-    F -->|llm| K[Validate .env and credentials]
-    K --> L{Provider}
-    L -->|Cursor| M[Cursor SDK prompt over artifact directory]
-    L -->|OpenAI-compatible| N[Inventory artifacts and expose local tools]
-    N --> O[Tool-driven ReAct loop]
-    F -->|embedded| Q[Run deterministic local analysis]
-    Q --> R[Heuristic reranking and workload risk scoring]
-    R --> S[Log clustering and resource outlier detection]
-    S --> T[Compact evidence summary to local OpenAI-compatible model]
-    M --> P[Write Markdown report]
-    O --> P
-    T --> P
+    E --> F[Load /system-settings credentials]
+    F --> G{Provider}
+    G -->|Cursor| H[Cursor SDK prompt over artifact directory]
+    G -->|OpenAI-compatible| I[Inventory artifacts and expose local tools]
+    I --> J[Tool-driven ReAct loop]
+    H --> K[Write Markdown report]
+    J --> K
 ```
 
-## What local mode analyzes
+## What the assessment covers
 
 - namespace discovery
 - application inventory
@@ -375,32 +315,14 @@ Show CLI help:
 python -m agent --help
 ```
 
-Run local analysis directly:
+Run analysis directly:
 
 ```bash
-python -m agent --artifacts ./artifacts --mode local
-```
-
-Run LLM analysis directly:
-
-```bash
-python -m agent --artifacts ./artifacts --mode llm
-```
-
-Run embedded analysis directly:
-
-```bash
-python -m agent --artifacts ./artifacts --mode embedded
-```
-
-Run with a specific report locale:
-
-```bash
-python -m agent --artifacts ./artifacts --mode local --locale en-US
+python -m agent --artifacts ./artifacts
 ```
 
 ## Notes
 
 - The analyzer is offline with respect to cluster access. It only reads local artifacts.
 - The quality of the report depends on the completeness of the collected artifacts.
-- LLM mode does not replace artifact sanitization. Sensitive-data removal should happen upstream in the harvester pipeline.
+- Generative analysis does not replace artifact sanitization. Sensitive-data removal should happen upstream in the harvester pipeline.

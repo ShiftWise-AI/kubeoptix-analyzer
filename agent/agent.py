@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import Settings
-from agent.i18n import DEFAULT_LOCALE
 from agent.llm import LLMClient
 from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
@@ -29,42 +28,24 @@ def _message_content(message: Any) -> str:
     return ""
 
 
-def _fallback_section_texts(locale: str) -> tuple[str, str, str, str]:
-    if locale == DEFAULT_LOCALE:
-        return (
-            "Agent summary",
-            "Final notes",
-            "Incomplete summary",
-            "The agent reached the iteration limit before completing the analysis.",
-        )
-    return (
-        "Agent summary",
-        "Final notes",
-        "Incomplete summary",
-        "The agent hit the iteration limit before completing the analysis.",
-    )
-
-
 def run_assessment(
     artifacts_dir: Path,
     settings: Settings,
-    locale: str = "pt-BR",
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
         raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
-    report = ReportBuilder(artifacts_dir=artifacts_dir, locale=locale)
+    report = ReportBuilder(artifacts_dir=artifacts_dir)
     tools = build_all_tools(artifacts_dir, report, settings.max_file_chars)
     registry = tools_by_name(tools)
     schemas = openai_tool_schemas(tools)
 
     inventory = _initial_inventory(artifacts_dir, settings.max_file_chars)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": build_system_prompt(locale)},
-        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory, locale)},
+        {"role": "system", "content": build_system_prompt()},
+        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory)},
     ]
-    summary_title, final_notes_title, incomplete_title, incomplete_body = _fallback_section_texts(locale)
 
     llm = LLMClient(settings)
     print(f"[agent] Artifacts: {artifacts_dir}")
@@ -98,9 +79,9 @@ def run_assessment(
         if not message.tool_calls:
             final_text = _message_content(message).strip()
             if final_text and not report.sections:
-                report.add_section(summary_title, final_text)
+                report.add_section("Resumo do agente", final_text)
             elif final_text:
-                report.add_section(final_notes_title, final_text)
+                report.add_section("Notas finais", final_text)
             break
 
         for tool_call in message.tool_calls:
@@ -136,7 +117,10 @@ def run_assessment(
     else:
         print("[agent] Iteration limit reached.")
         if not report.sections:
-            report.add_section(incomplete_title, incomplete_body)
+            report.add_section(
+                "Resumo incompleto",
+                "O agente atingiu o limite de iterações antes de concluir a análise.",
+            )
 
     out = report.write()
     print(f"[agent] Report written to: {out}")

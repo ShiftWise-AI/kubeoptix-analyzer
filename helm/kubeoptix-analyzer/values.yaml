@@ -35,16 +35,11 @@ podEnv:
   KUBECONFIG: /tmp/kubeconfig
   TZ: ""
 
-env: {}
+systemSettings:
+  url: ""
 
-secretEnv:
-  create: false
-  name: ""
-  cursorApiKey: ""
-  cursorModel: composer-2.5
-  llmApiKey: ""
-  llmBaseUrl: https://api.openai.com/v1
-  llmModel: gpt-4o-mini
+env:
+  LLM_BASE_URL: https://api.openai.com/v1
 
 service:
   api:
