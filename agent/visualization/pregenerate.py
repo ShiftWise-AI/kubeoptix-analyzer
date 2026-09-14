@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +10,7 @@ from agent.analysis.observability import analyze_observability
 from agent.analysis.resources import analyze_resources
 from agent.analysis.topology import analyze_topology
 from agent.analysis.worknodes import discover_worknodes
-from agent.visualization.markdown import embed_markdown_images
+from agent.visualization.markdown import embed_markdown_images, strip_unresolvable_image_refs
 from agent.visualization.report_assets import ReportAssets
 
 
@@ -140,36 +139,20 @@ def format_visualization_catalog(
     return "\n".join(lines).rstrip()
 
 
-_MD_IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
-_HTML_IMAGE_REF_RE = re.compile(
-    r'<img\s[^>]*src="[^"]+(?:report_assets/|\.png|data:image/png;base64,)[^"]*"',
-    re.IGNORECASE,
-)
-
-
 def _report_has_embedded_images(content: str) -> bool:
     return "data:image/png;base64," in content
 
 
-def _report_has_image_refs(content: str) -> bool:
-    """Detecta imagens reais no Markdown, ignorando menções em prosa a report_assets/."""
-    if _report_has_embedded_images(content):
-        return True
-    for match in _MD_IMAGE_REF_RE.finditer(content):
-        ref = match.group(0)
-        if "report_assets/" in ref or ".png" in ref.lower():
-            return True
-    return bool(_HTML_IMAGE_REF_RE.search(content))
+def embedded_image_count(content: str) -> int:
+    return content.count("data:image/png;base64,")
 
 
 def append_visualizations_to_markdown(
     content: str,
     visualizations: list[NamespaceVisualizations],
 ) -> str:
-    """Anexa seção de visualizações quando o relatório não tem PNGs embutidos."""
+    """Anexa visualizações pré-geradas quando o relatório ainda não tem PNGs embutidos."""
     if not visualizations or _report_has_embedded_images(content):
-        return content
-    if _report_has_image_refs(content):
         return content
     catalog = format_visualization_catalog(visualizations)
     return f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
@@ -182,8 +165,6 @@ def append_missing_visualizations(
     """Garante que o relatório referencia PNGs quando o LLM não os incluiu."""
     body = "\n".join(text for _, text in sections)
     if not visualizations or _report_has_embedded_images(body):
-        return sections
-    if _report_has_image_refs(body):
         return sections
 
     catalog = format_visualization_catalog(visualizations)
@@ -198,7 +179,22 @@ def finalize_report_markdown(
     artifacts_dir: Path,
     visualizations: list[NamespaceVisualizations] | None = None,
 ) -> str:
-    """Inclui visualizações ausentes e embute PNGs no corpo do Markdown."""
+    """Remove refs quebradas do LLM, injeta visualizações e embute PNGs no Markdown."""
+    artifacts_dir = artifacts_dir.resolve()
+    content = strip_unresolvable_image_refs(content, assets_dir=artifacts_dir)
     if visualizations:
         content = append_visualizations_to_markdown(content, visualizations)
-    return embed_markdown_images(content, markdown_dir=artifacts_dir)
+    content = embed_markdown_images(
+        content,
+        markdown_dir=artifacts_dir,
+        assets_dir=artifacts_dir,
+    )
+    # Garantia: se ainda não há PNG embutido, reinjeta e re-embuta.
+    if visualizations and embedded_image_count(content) == 0:
+        content = append_visualizations_to_markdown(content, visualizations)
+        content = embed_markdown_images(
+            content,
+            markdown_dir=artifacts_dir,
+            assets_dir=artifacts_dir,
+        )
+    return content
