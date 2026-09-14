@@ -34,8 +34,9 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
      Fonte: `<ns>/resources/clusterserviceversions.operators.coreos.com/`, `subscriptions.operators.coreos.com/`, `packagemanifests.packages.operators.coreos.com/`
 3. Arquitetura reversa
    - Baseada em Deployments, Services, Routes e ConfigMaps
-   - Inclua um diagrama mermaid flowchart TB simples (Usuário → apps e apps → apps)
-   - Sem sintaxe inválida no mermaid (não use parênteses em rótulos de aresta)
+   - Não use Mermaid. Diagramas e gráficos devem ser PNG pré-renderizados
+     (matplotlib para gráficos de composição; KubeDiagrams + Graphviz para arquitetura)
+     referenciados no Markdown como `![título](./report_assets/nome.png)`
 4. Recursos de CPU e memória
    - 4.1 Lista por aplicação (requests/limits) **com coluna QoS** e **legenda QoS abaixo da tabela** (Guaranteed / Burstable / BestEffort)
    - Sumário do namespace
@@ -45,10 +46,10 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
    - Sugestão conservadora otimizada de CPU/memória por contêiner (Burstable, limit ≈ 2× request)
    - Sugestões de HPA (min/max, target CPU/memória) e exemplos YAML aplicáveis
    - Item de **boas práticas de affinity / anti-affinity** (inventário nos workloads + recomendações podAntiAffinity, nodeAffinity, topologia)
-   - Gráficos pizza mermaid (`pie showData`) quando houver dados
+   - Gráficos de composição em PNG (donut matplotlib) quando houver dados
 5. Observabilidade (métricas, logs, monitoramento)
    - Oportunidades de rastreabilidade e correção de erros
-   - Gráficos pizza de erros por sistema/aplicação e por categoria
+   - Gráficos PNG de erros por sistema/aplicação e por categoria
 6. ConfigMaps e dados sensíveis (secrets, chaves, certificados)
 7. Plano de ação em seções separadas:
    - Ações de infraestrutura do cluster / plataforma

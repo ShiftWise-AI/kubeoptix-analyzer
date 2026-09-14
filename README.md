@@ -280,20 +280,13 @@ The report covers inventory, topology, resources, observability, ConfigMap secur
 
 ## Internal analyzer flow
 
-```mermaid
-flowchart TD
-    A[Prepared artifacts directory] --> B[run.sh]
-    B --> C[Create or reuse .venv]
-    C --> D[Install dependencies]
-    D --> E[python -m agent]
-    E --> F[Load /system-settings credentials]
-    F --> G{Provider}
-    G -->|Cursor| H[Cursor SDK prompt over artifact directory]
-    G -->|OpenAI-compatible| I[Inventory artifacts and expose local tools]
-    I --> J[Tool-driven ReAct loop]
-    H --> K[Write Markdown report]
-    J --> K
-```
+1. Prepared artifacts directory
+2. `run.sh` creates or reuses `.venv` and installs dependencies
+3. `python -m agent` loads `/system-settings` credentials
+4. Provider branch:
+   - **Cursor** — Cursor SDK prompt over the artifact directory
+   - **OpenAI-compatible** — inventory artifacts and tool-driven ReAct loop
+5. Write Markdown report with PNG charts/diagrams in `report_assets/` (matplotlib + KubeDiagrams)
 
 ## What the assessment covers
 

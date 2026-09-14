@@ -16,6 +16,7 @@ from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
 from agent.analysis.worknodes import discover_worknodes
+from agent.visualization import ReportAssets, embed_markdown_images
 def resolve_report_path(
     artifacts_dir: Path,
     report_path: Path | None = None,
@@ -70,6 +71,7 @@ def run_local_assessment(
 
     out = resolve_report_path(artifacts_dir, report_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    assets = ReportAssets(assets_dir=out.parent / "report_assets")
 
     namespaces = discover_namespaces(artifacts_dir)
     worknodes = discover_worknodes(artifacts_dir)
@@ -142,9 +144,18 @@ def run_local_assessment(
                 "",
                 render_operators_md(ns.name, operators),
                 _render_findings_block(ns.name, findings),
-                _demote_headings(render_topology_md(ns.name, topo), levels=2),
-                _demote_headings(render_resources_md(ns.name, resources), levels=2),
-                _demote_headings(render_observability_md(ns.name, obs), levels=2),
+                _demote_headings(
+                    render_topology_md(ns.name, topo, ns=ns, assets=assets),
+                    levels=2,
+                ),
+                _demote_headings(
+                    render_resources_md(ns.name, resources, assets=assets),
+                    levels=2,
+                ),
+                _demote_headings(
+                    render_observability_md(ns.name, obs, assets=assets),
+                    levels=2,
+                ),
                 _demote_headings(render_configmaps_md(ns.name, cms), levels=2),
                 _demote_headings(
                     render_action_plan_md(ns.name, findings, resources, obs, cms),
@@ -170,6 +181,7 @@ def run_local_assessment(
     content = "\n".join(parts)
     # Normalize repeated blank lines.
     content = re.sub(r"\n{3,}", "\n\n", content)
+    content = embed_markdown_images(content, markdown_dir=out.parent)
     out.write_text(content, encoding="utf-8")
     print(f"[agent] Single report written to: {out}")
     return out

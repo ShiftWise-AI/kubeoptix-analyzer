@@ -685,7 +685,12 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
     return lines
 
 
-def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
+def render_resources_md(
+    ns_name: str,
+    analysis: ResourceAnalysis,
+    *,
+    assets=None,
+) -> str:
     lines = [
         f"# Recursos de CPU e memória — `{ns_name}`",
         "",
@@ -850,21 +855,28 @@ def render_resources_md(ns_name: str, analysis: ResourceAnalysis) -> str:
         if s.cpu_lim_m > 0
     }
 
-    def _pie(title: str, data: dict[str, int]) -> list[str]:
-        out = ["```mermaid", "pie showData", f"    title {title}"]
-        if not data:
-            out.append('    "sem dados" : 1')
-        else:
-            for label, value in sorted(data.items(), key=lambda x: -x[1])[:12]:
-                safe = str(label).replace('"', "'")
-                out.append(f'    "{safe}" : {value}')
-        out.append("```")
-        return out
-
-    lines.extend(["## Gráfico pizza — memória limits atuais por aplicação (Mi)", ""])
-    lines.extend(_pie("Memoria limits Mi por aplicacao", mem_counter))
-    lines.extend(["", "## Gráfico pizza — CPU limits atuais por aplicação (millicores)", ""])
-    lines.extend(_pie("CPU limits m por aplicacao", cpu_counter))
+    lines.extend(["## Gráfico — memória limits atuais por aplicação (Mi)", ""])
+    if assets is not None:
+        lines.append(
+            assets.render_composition(
+                f"{ns_name}_mem_limits_by_app",
+                "Memória limits (Mi) por aplicação",
+                mem_counter,
+            )
+        )
+    else:
+        lines.append("_Gráfico indisponível (assets não configurados)._")
+    lines.extend(["", "## Gráfico — CPU limits atuais por aplicação (millicores)", ""])
+    if assets is not None:
+        lines.append(
+            assets.render_composition(
+                f"{ns_name}_cpu_limits_by_app",
+                "CPU limits (m) por aplicação",
+                cpu_counter,
+            )
+        )
+    else:
+        lines.append("_Gráfico indisponível (assets não configurados)._")
     lines.extend(["", *_render_affinity_section(analysis)])
     lines.append("")
     return "\n".join(lines)

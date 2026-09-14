@@ -140,27 +140,12 @@ def analyze_observability(
     return result
 
 
-def _mermaid_pie(title: str, data: Counter, limit: int = 10) -> str:
-    """Mermaid pie chart for errors or other quantitative distributions."""
-    items = data.most_common(limit)
-    lines = ["```mermaid", "pie showData", f"    title {title}"]
-    if not items:
-        lines.append('    "sem dados" : 1')
-        lines.append("```")
-        return "\n".join(lines)
-
-    total_all = sum(data.values())
-    shown = sum(v for _, v in items)
-    for label, value in items:
-        safe = str(label).replace('"', "'")
-        lines.append(f'    "{safe}" : {value}')
-    if total_all > shown:
-        lines.append(f'    "outros" : {total_all - shown}')
-    lines.append("```")
-    return "\n".join(lines)
-
-
-def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
+def render_observability_md(
+    ns_name: str,
+    obs: ObservabilityResult,
+    *,
+    assets=None,
+) -> str:
     lines = [
         f"# Observability — logs, metrics, and monitoring — `{ns_name}`",
         "",
@@ -173,19 +158,47 @@ def render_observability_md(ns_name: str, obs: ObservabilityResult) -> str:
         f"- PrometheusRules: **{len(obs.prometheus_rules)}**"
         + (f" (`{', '.join(obs.prometheus_rules)}`)" if obs.prometheus_rules else ""),
         "",
-        "## Pie chart — errors by application/system",
+        "## Gráfico — erros por aplicação/sistema",
         "",
-        _mermaid_pie("Errors by application", obs.errors_by_app),
-        "",
-        "## Pie chart — errors by category",
-        "",
-        _mermaid_pie("Errors by category", obs.errors_by_category),
-        "",
-        "## Quantitative table by application",
-        "",
-        "| Application | Occurrences | % of total |",
-        "|-------------|-------------|-----------|",
     ]
+    if assets is not None:
+        lines.append(
+            assets.render_composition(
+                f"{ns_name}_errors_by_app",
+                "Erros por aplicação",
+                obs.errors_by_app,
+                include_other=True,
+            )
+        )
+    else:
+        lines.append("_Gráfico indisponível (assets não configurados)._")
+    lines.extend(
+        [
+            "",
+            "## Gráfico — erros por categoria",
+            "",
+        ]
+    )
+    if assets is not None:
+        lines.append(
+            assets.render_composition(
+                f"{ns_name}_errors_by_category",
+                "Erros por categoria",
+                obs.errors_by_category,
+                include_other=True,
+            )
+        )
+    else:
+        lines.append("_Gráfico indisponível (assets não configurados)._")
+    lines.extend(
+        [
+            "",
+            "## Quantitative table by application",
+            "",
+            "| Application | Occurrences | % of total |",
+            "|-------------|-------------|-----------|",
+        ]
+    )
     total_errors = sum(obs.errors_by_app.values()) or 1
     if obs.errors_by_app:
         for app, n in obs.errors_by_app.most_common():
