@@ -35,10 +35,22 @@ def main() -> None:
             "(default: <artifacts>/assessment-report.md)"
         ),
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Run deterministic local analysis (no LLM, with embedded PNG charts)",
+    )
     args = parser.parse_args()
 
     artifacts = Path(args.artifacts)
     report = Path(args.report) if args.report else None
+
+    if args.local:
+        from agent.local_analyze import run_local_assessment
+
+        out = run_local_assessment(artifacts, report)
+        print(f"[agent] Report written to: {out}")
+        return
 
     try:
         load_runtime_settings()

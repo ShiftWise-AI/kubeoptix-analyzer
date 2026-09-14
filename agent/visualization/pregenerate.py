@@ -10,6 +10,7 @@ from agent.analysis.observability import analyze_observability
 from agent.analysis.resources import analyze_resources
 from agent.analysis.topology import analyze_topology
 from agent.analysis.worknodes import discover_worknodes
+from agent.visualization.markdown import embed_markdown_images
 from agent.visualization.report_assets import ReportAssets
 
 
@@ -138,16 +139,43 @@ def format_visualization_catalog(
     return "\n".join(lines).rstrip()
 
 
+def _report_has_image_refs(content: str) -> bool:
+    return "report_assets/" in content or "data:image/png;base64," in content
+
+
+def append_visualizations_to_markdown(
+    content: str,
+    visualizations: list[NamespaceVisualizations],
+) -> str:
+    """Anexa seção de visualizações quando o relatório não referencia PNGs."""
+    if not visualizations or _report_has_image_refs(content):
+        return content
+    catalog = format_visualization_catalog(visualizations)
+    return f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
+
+
 def append_missing_visualizations(
     sections: list[tuple[str, str]],
     visualizations: list[NamespaceVisualizations],
 ) -> list[tuple[str, str]]:
     """Garante que o relatório referencia PNGs quando o LLM não os incluiu."""
     body = "\n".join(text for _, text in sections)
-    if "report_assets/" in body or "data:image/png;base64," in body:
+    if _report_has_image_refs(body):
         return sections
 
     catalog = format_visualization_catalog(visualizations)
     updated = list(sections)
     updated.append(("Visualizações", catalog))
     return updated
+
+
+def finalize_report_markdown(
+    content: str,
+    *,
+    artifacts_dir: Path,
+    visualizations: list[NamespaceVisualizations] | None = None,
+) -> str:
+    """Inclui visualizações ausentes e embute PNGs no corpo do Markdown."""
+    if visualizations:
+        content = append_visualizations_to_markdown(content, visualizations)
+    return embed_markdown_images(content, markdown_dir=artifacts_dir)
