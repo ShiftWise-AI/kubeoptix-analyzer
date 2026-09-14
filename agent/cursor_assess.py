@@ -78,6 +78,10 @@ def run_cursor_assessment(
         ) from exc
 
     from agent.local_analyze import resolve_report_path
+    from agent.visualization.pregenerate import (
+        format_visualization_catalog,
+        generate_all_visualizations,
+    )
 
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
@@ -93,8 +97,23 @@ def run_cursor_assessment(
     out = resolve_report_path(artifacts_dir, report_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    assets, visualizations = generate_all_visualizations(artifacts_dir)
+    viz_catalog = format_visualization_catalog(visualizations)
+    if visualizations:
+        print(
+            f"[agent] Pre-generated {len(visualizations)} namespace visualization set(s) "
+            f"in {assets.assets_dir}"
+        )
+
     model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
     prompt = ASSESSMENT_PROMPT.format(report_path=str(out))
+    if viz_catalog.strip():
+        prompt = (
+            f"{prompt}\n\n"
+            "Visualizações PNG já geradas (incorpore os blocos Markdown abaixo nas seções "
+            "correspondentes do relatório; não gere novamente se os arquivos já existem):\n\n"
+            f"{viz_catalog}\n"
+        )
 
     print(f"[agent] LLM mode via Cursor SDK")
     print(f"[agent] Artifacts (cwd): {artifacts_dir}")

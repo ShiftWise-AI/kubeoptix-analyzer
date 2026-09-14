@@ -12,6 +12,11 @@ from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
 from agent.tools import build_all_tools, openai_tool_schemas, tools_by_name
 from agent.tools.filesystem import build_filesystem_tools
+from agent.visualization.pregenerate import (
+    append_missing_visualizations,
+    format_visualization_catalog,
+    generate_all_visualizations,
+)
 
 
 def _initial_inventory(artifacts_dir: Path, max_file_chars: int) -> str:
@@ -37,14 +42,35 @@ def run_assessment(
         raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
     report = ReportBuilder(artifacts_dir=artifacts_dir)
-    tools = build_all_tools(artifacts_dir, report, settings.max_file_chars)
+    assets, visualizations = generate_all_visualizations(artifacts_dir)
+    viz_catalog = format_visualization_catalog(visualizations)
+    if visualizations:
+        print(
+            f"[agent] Pre-generated {len(visualizations)} namespace visualization set(s) "
+            f"in {assets.assets_dir}"
+        )
+
+    tools = build_all_tools(
+        artifacts_dir,
+        report,
+        settings.max_file_chars,
+        assets=assets,
+        visualizations=visualizations,
+    )
     registry = tools_by_name(tools)
     schemas = openai_tool_schemas(tools)
 
     inventory = _initial_inventory(artifacts_dir, settings.max_file_chars)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": build_system_prompt()},
-        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory)},
+        {
+            "role": "user",
+            "content": build_user_prompt(
+                str(artifacts_dir),
+                inventory,
+                viz_catalog,
+            ),
+        },
     ]
 
     llm = LLMClient(settings)
@@ -121,6 +147,12 @@ def run_assessment(
                 "Resumo incompleto",
                 "O agente atingiu o limite de iterações antes de concluir a análise.",
             )
+
+    if visualizations:
+        report.sections = append_missing_visualizations(
+            report.sections,
+            visualizations,
+        )
 
     out = report.write()
     print(f"[agent] Report written to: {out}")

@@ -10,6 +10,9 @@ from agent.tools.base import FunctionTool, object_schema
 from agent.tools.filesystem import build_filesystem_tools
 from agent.tools.logs import build_log_tools
 from agent.tools.manifests import build_manifest_tools
+from agent.tools.visualization import build_visualization_tools
+from agent.visualization.pregenerate import NamespaceVisualizations
+from agent.visualization.report_assets import ReportAssets
 
 
 def build_report_tools(report: ReportBuilder) -> list[FunctionTool]:
@@ -47,11 +50,15 @@ def build_all_tools(
     artifacts_dir: Path,
     report: ReportBuilder,
     max_file_chars: int,
+    *,
+    assets: ReportAssets,
+    visualizations: list[NamespaceVisualizations],
 ) -> list[FunctionTool]:
     tools: list[FunctionTool] = []
     tools.extend(build_filesystem_tools(artifacts_dir, max_file_chars))
     tools.extend(build_manifest_tools(artifacts_dir))
     tools.extend(build_log_tools(artifacts_dir))
+    tools.extend(build_visualization_tools(artifacts_dir, assets, visualizations))
     tools.extend(build_report_tools(report))
     return tools
 
