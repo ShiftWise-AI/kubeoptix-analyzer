@@ -34,9 +34,8 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
      Fonte: `<ns>/resources/clusterserviceversions.operators.coreos.com/`, `subscriptions.operators.coreos.com/`, `packagemanifests.packages.operators.coreos.com/`
 3. Arquitetura reversa
    - Baseada em Deployments, Services, Routes e ConfigMaps
-   - Não use Mermaid. Diagramas e gráficos devem ser PNG pré-renderizados
-     (matplotlib para gráficos de composição; KubeDiagrams + Graphviz para arquitetura)
-     referenciados no Markdown como `![título](./report_assets/nome.png)`
+   - Não use Mermaid. Incorpore os blocos Markdown de `list_visualizations` com PNG
+     já embutidos como `data:image/png;base64,...` (nunca use paths `./report_assets/`)
 4. Recursos de CPU e memória
    - 4.1 Lista por aplicação (requests/limits) **com coluna QoS** e **legenda QoS abaixo da tabela** (Guaranteed / Burstable / BestEffort)
    - Sumário do namespace
