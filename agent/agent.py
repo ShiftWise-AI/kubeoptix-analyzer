@@ -12,8 +12,10 @@ from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
 from agent.tools import build_all_tools, openai_tool_schemas, tools_by_name
 from agent.tools.filesystem import build_filesystem_tools
+from agent.local_analyze import resolve_report_path
 from agent.visualization.pregenerate import (
     append_missing_visualizations,
+    finalize_report_markdown,
     format_visualization_catalog,
     generate_all_visualizations,
 )
@@ -36,6 +38,7 @@ def _message_content(message: Any) -> str:
 def run_assessment(
     artifacts_dir: Path,
     settings: Settings,
+    report_path: Path | None = None,
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
@@ -154,6 +157,15 @@ def run_assessment(
             visualizations,
         )
 
-    out = report.write()
-    print(f"[agent] Report written to: {out}")
-    return out
+    dest = resolve_report_path(artifacts_dir, report_path)
+    content = finalize_report_markdown(
+        report.render(),
+        artifacts_dir=artifacts_dir,
+        visualizations=visualizations,
+    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
+    embedded_count = content.count("data:image/png;base64,")
+    print(f"[agent] Report written to: {dest}")
+    print(f"[agent] Embedded {embedded_count} PNG image(s) into report body")
+    return dest

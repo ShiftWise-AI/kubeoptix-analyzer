@@ -56,6 +56,7 @@ def _build_command(namespace_dir: Path, report_file: Path) -> list[str]:
     command = [
         "bash",
         str(script_path),
+        "--llm",
         "--artifacts",
         str(namespace_dir),
         "--report",

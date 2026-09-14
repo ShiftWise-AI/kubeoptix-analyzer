@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,16 +140,36 @@ def format_visualization_catalog(
     return "\n".join(lines).rstrip()
 
 
+_MD_IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+_HTML_IMAGE_REF_RE = re.compile(
+    r'<img\s[^>]*src="[^"]+(?:report_assets/|\.png|data:image/png;base64,)[^"]*"',
+    re.IGNORECASE,
+)
+
+
+def _report_has_embedded_images(content: str) -> bool:
+    return "data:image/png;base64," in content
+
+
 def _report_has_image_refs(content: str) -> bool:
-    return "report_assets/" in content or "data:image/png;base64," in content
+    """Detecta imagens reais no Markdown, ignorando menções em prosa a report_assets/."""
+    if _report_has_embedded_images(content):
+        return True
+    for match in _MD_IMAGE_REF_RE.finditer(content):
+        ref = match.group(0)
+        if "report_assets/" in ref or ".png" in ref.lower():
+            return True
+    return bool(_HTML_IMAGE_REF_RE.search(content))
 
 
 def append_visualizations_to_markdown(
     content: str,
     visualizations: list[NamespaceVisualizations],
 ) -> str:
-    """Anexa seção de visualizações quando o relatório não referencia PNGs."""
-    if not visualizations or _report_has_image_refs(content):
+    """Anexa seção de visualizações quando o relatório não tem PNGs embutidos."""
+    if not visualizations or _report_has_embedded_images(content):
+        return content
+    if _report_has_image_refs(content):
         return content
     catalog = format_visualization_catalog(visualizations)
     return f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
@@ -160,6 +181,8 @@ def append_missing_visualizations(
 ) -> list[tuple[str, str]]:
     """Garante que o relatório referencia PNGs quando o LLM não os incluiu."""
     body = "\n".join(text for _, text in sections)
+    if not visualizations or _report_has_embedded_images(body):
+        return sections
     if _report_has_image_refs(body):
         return sections
 

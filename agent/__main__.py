@@ -40,6 +40,11 @@ def main() -> None:
         action="store_true",
         help="Run deterministic local analysis (no LLM, with embedded PNG charts)",
     )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="Force OpenAI-compatible LLM assessment (ignores CURSOR_API_KEY)",
+    )
     args = parser.parse_args()
 
     artifacts = Path(args.artifacts)
@@ -61,6 +66,20 @@ def main() -> None:
     cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     openai_key = os.getenv("LLM_API_KEY", "").strip()
 
+    if args.llm:
+        if not openai_key:
+            raise SystemExit(
+                "--llm requires LLM_API_KEY (from system settings or .env)."
+            )
+        from agent.agent import run_assessment
+        from agent.config import get_settings
+
+        settings = get_settings()
+        print("[agent] Provider: OpenAI-compatible API (--llm)")
+        out = run_assessment(artifacts, settings, report_path=report)
+        print(f"[agent] Report written to: {out}")
+        return
+
     if cursor_key:
         from agent.cursor_assess import run_cursor_assessment
 
@@ -73,13 +92,7 @@ def main() -> None:
         from agent.config import get_settings
 
         settings = get_settings()
-        out = run_assessment(artifacts, settings)
-        if report is not None:
-            dest = resolve_report_path(artifacts, report)
-            if out.resolve() != dest:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
-                print(f"[agent] Report copied to: {dest}")
+        out = run_assessment(artifacts, settings, report_path=report)
         print(f"[agent] Report written to: {out}")
         return
 
