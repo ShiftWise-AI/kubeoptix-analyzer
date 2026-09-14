@@ -15,9 +15,17 @@ from agent.visualization.pregenerate import NamespaceVisualizations, sanitize_se
 from agent.visualization.report_assets import ReportAssets
 
 
-def build_report_tools(report: ReportBuilder, artifacts_dir: Path) -> list[FunctionTool]:
+def build_report_tools(
+    report: ReportBuilder,
+    artifacts_dir: Path,
+    report_dir: Path | None = None,
+) -> list[FunctionTool]:
     def write_report_section(title: str, body: str) -> str:
-        body = sanitize_section_markdown(body, artifacts_dir=artifacts_dir)
+        body = sanitize_section_markdown(
+            body,
+            artifacts_dir=artifacts_dir,
+            report_dir=report_dir,
+        )
         report.add_section(title, body)
         return f"Section '{title}' registered ({len(body)} chars)."
 
@@ -54,13 +62,14 @@ def build_all_tools(
     *,
     assets: ReportAssets,
     visualizations: list[NamespaceVisualizations],
+    report_dir: Path | None = None,
 ) -> list[FunctionTool]:
     tools: list[FunctionTool] = []
     tools.extend(build_filesystem_tools(artifacts_dir, max_file_chars))
     tools.extend(build_manifest_tools(artifacts_dir))
     tools.extend(build_log_tools(artifacts_dir))
     tools.extend(build_visualization_tools(artifacts_dir, assets, visualizations))
-    tools.extend(build_report_tools(report, artifacts_dir))
+    tools.extend(build_report_tools(report, artifacts_dir, report_dir=report_dir))
     return tools
 
 

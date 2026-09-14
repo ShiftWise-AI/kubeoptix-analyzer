@@ -69,18 +69,24 @@ def resolve_local_image(ref: str, *, search_dirs: tuple[Path, ...]) -> Path | No
     return None
 
 
+def image_search_dirs(artifacts_dir: Path, report_dir: Path | None = None) -> tuple[Path, ...]:
+    """Monta diretórios de busca para PNGs (artefatos e diretório do relatório)."""
+    dirs: list[Path] = []
+    for candidate in (report_dir, artifacts_dir):
+        if candidate is None:
+            continue
+        resolved = candidate.resolve()
+        if resolved not in dirs:
+            dirs.append(resolved)
+    return tuple(dirs)
+
+
 def embed_markdown_images(
     content: str,
     *,
-    markdown_dir: Path,
-    assets_dir: Path | None = None,
+    search_dirs: tuple[Path, ...],
 ) -> str:
     """Substitui referências PNG locais por data URIs embutidas no Markdown."""
-    search_dirs = (markdown_dir.resolve(),)
-    if assets_dir is not None:
-        resolved_assets = assets_dir.resolve()
-        if resolved_assets not in search_dirs:
-            search_dirs = (*search_dirs, resolved_assets)
 
     def _encode(ref: str) -> str | None:
         image_path = resolve_local_image(ref, search_dirs=search_dirs)
@@ -113,7 +119,7 @@ def embed_markdown_images(
 def strip_unresolvable_image_refs(
     content: str,
     *,
-    assets_dir: Path,
+    search_dirs: tuple[Path, ...],
 ) -> str:
     """Remove referências de imagem locais que não existem (ex.: paths inventados pelo LLM)."""
 
@@ -121,7 +127,7 @@ def strip_unresolvable_image_refs(
         ref = match.group(2).strip()
         if ref.startswith(("http://", "https://", "data:")):
             return match.group(0)
-        if resolve_local_image(ref, search_dirs=(assets_dir.resolve(),)) is None:
+        if resolve_local_image(ref, search_dirs=search_dirs) is None:
             return ""
         return match.group(0)
 
@@ -129,7 +135,7 @@ def strip_unresolvable_image_refs(
         ref = match.group(2).strip()
         if ref.startswith(("http://", "https://", "data:")):
             return match.group(0)
-        if resolve_local_image(ref, search_dirs=(assets_dir.resolve(),)) is None:
+        if resolve_local_image(ref, search_dirs=search_dirs) is None:
             return ""
         return match.group(0)
 

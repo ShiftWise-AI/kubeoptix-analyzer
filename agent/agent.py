@@ -44,6 +44,7 @@ def run_assessment(
     if not artifacts_dir.is_dir():
         raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
+    dest = resolve_report_path(artifacts_dir, report_path)
     report = ReportBuilder(artifacts_dir=artifacts_dir)
     assets, visualizations = generate_all_visualizations(artifacts_dir)
     viz_catalog = format_visualization_catalog(visualizations)
@@ -59,6 +60,7 @@ def run_assessment(
         settings.max_file_chars,
         assets=assets,
         visualizations=visualizations,
+        report_dir=dest.parent,
     )
     registry = tools_by_name(tools)
     schemas = openai_tool_schemas(tools)
@@ -157,12 +159,16 @@ def run_assessment(
             visualizations,
         )
 
-    dest = resolve_report_path(artifacts_dir, report_path)
     content = finalize_report_markdown(
         report.render(),
         artifacts_dir=artifacts_dir,
+        report_dir=dest.parent,
         visualizations=visualizations,
     )
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
+
+    from agent.visualization.report_postprocess import cleanup_stray_report_scripts
+
+    cleanup_stray_report_scripts(dest.parent)
     return dest

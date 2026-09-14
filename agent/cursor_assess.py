@@ -156,6 +156,7 @@ def run_cursor_assessment(
     final = finalize_report_markdown(
         content,
         artifacts_dir=artifacts_dir,
+        report_dir=out.parent,
         visualizations=visualizations,
     )
     if final != content:

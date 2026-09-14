@@ -16,7 +16,8 @@ from agent.analysis.references import REFERENCES_MD
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
 from agent.analysis.worknodes import discover_worknodes
-from agent.visualization import ReportAssets, embed_markdown_images
+from agent.visualization import ReportAssets
+from agent.visualization.markdown import embed_markdown_images, image_search_dirs
 def resolve_report_path(
     artifacts_dir: Path,
     report_path: Path | None = None,
@@ -181,7 +182,10 @@ def run_local_assessment(
     content = "\n".join(parts)
     # Normalize repeated blank lines.
     content = re.sub(r"\n{3,}", "\n\n", content)
-    content = embed_markdown_images(content, markdown_dir=out.parent)
+    content = embed_markdown_images(
+        content,
+        search_dirs=image_search_dirs(artifacts_dir, out.parent),
+    )
     out.write_text(content, encoding="utf-8")
     print(f"[agent] Single report written to: {out}")
     return out

@@ -12,6 +12,7 @@ from agent.analysis.topology import analyze_topology
 from agent.analysis.worknodes import discover_worknodes
 from agent.visualization.markdown import (
     embed_markdown_images,
+    image_search_dirs,
     strip_local_image_refs,
     strip_unresolvable_image_refs,
 )
@@ -175,15 +176,16 @@ def append_missing_visualizations(
     return updated
 
 
-def sanitize_section_markdown(body: str, *, artifacts_dir: Path) -> str:
+def sanitize_section_markdown(
+    body: str,
+    *,
+    artifacts_dir: Path,
+    report_dir: Path | None = None,
+) -> str:
     """Converte PNGs locais em base64 e remove paths relativos inventados pelo LLM."""
-    artifacts_dir = artifacts_dir.resolve()
-    body = strip_unresolvable_image_refs(body, assets_dir=artifacts_dir)
-    body = embed_markdown_images(
-        body,
-        markdown_dir=artifacts_dir,
-        assets_dir=artifacts_dir,
-    )
+    search_dirs = image_search_dirs(artifacts_dir, report_dir)
+    body = strip_unresolvable_image_refs(body, search_dirs=search_dirs)
+    body = embed_markdown_images(body, search_dirs=search_dirs)
     return strip_local_image_refs(body)
 
 
@@ -191,11 +193,15 @@ def finalize_report_markdown(
     content: str,
     *,
     artifacts_dir: Path,
+    report_dir: Path | None = None,
     visualizations: list[NamespaceVisualizations] | None = None,
 ) -> str:
     """Garante PNGs como stream base64 no corpo do Markdown (compatível com PDF)."""
-    artifacts_dir = artifacts_dir.resolve()
-    content = sanitize_section_markdown(content, artifacts_dir=artifacts_dir)
+    content = sanitize_section_markdown(
+        content,
+        artifacts_dir=artifacts_dir,
+        report_dir=report_dir,
+    )
     if visualizations and embedded_image_count(content) == 0:
         catalog = format_visualization_catalog(visualizations)
         content = f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
