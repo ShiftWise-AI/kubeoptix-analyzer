@@ -1,8 +1,15 @@
 # kubeoptix-analyzer
 
-`kubeoptix-analyzer` is an OpenShift and Kubernetes assessment tool that reads previously collected workload artifacts, inspects their configuration and runtime metadata, and produces a Markdown report with findings, risks, and suggested remediation actions.
+`kubeoptix-analyzer` is an OpenShift and Kubernetes assessment tool that reads previously collected workload artifacts, inspects their configuration and runtime metadata, and produces a Markdown report with findings, risks, visualizations, and suggested remediation actions.
 
-The project is designed for artifact-based analysis rather than live cluster mutation. It expects pre-collected manifests, logs, and worker-node inventory to already exist in a structured directory before execution. The analyzer then reviews workloads, services, routes, ConfigMaps, operators, and observability data to identify configuration and reliability issues.
+The project is designed for artifact-based analysis rather than live cluster mutation. It does not query or modify a cluster during analysis. It expects pre-collected manifests, logs, and worker-node inventory to already exist in a structured directory before execution. The analyzer then reviews workloads, services, routes, ConfigMaps, operators, resource sizing, and observability data to identify configuration and reliability issues.
+
+The application has two entry points:
+
+- a CLI (`python -m agent`) for local or batch analysis;
+- an HTTP service (`api.py`) for OpenShift integrations and progress polling.
+
+Both entry points invoke the same report-generation pipeline. The API runs one namespace at a time in sequence and writes one Markdown report per namespace.
 
 ## Features
 
@@ -11,8 +18,26 @@ The project is designed for artifact-based analysis rather than live cluster mut
 - Reviews CPU and memory requests/limits, HPA signals, and node capacity.
 - Identifies missing readiness/liveness probes, insecure routes, and common misconfigurations.
 - Scans logs for error patterns and observability gaps.
+- Generates PNG visualizations and embeds them into the Markdown report.
 - Produces a Markdown assessment report for a namespace or for all discovered namespaces.
 - Runs as a CLI or through an HTTP API in a containerized OpenShift deployment.
+
+## Analysis Flow
+
+```text
+Collected artifacts
+  |
+  v
+Layout discovery and YAML/log inspection
+  |
+  v
+Pre-generated visualizations + LLM analysis
+  |
+  v
+Markdown report with embedded PNGs
+```
+
+The LLM provider is selected in this order for the CLI: Cursor SDK when `CURSOR_API_KEY` is available, OpenAI-compatible API when `LLM_API_KEY` is available, or the OpenAI-compatible API explicitly with `--llm`. The API delegates provider selection to the same CLI script.
 
 ## Requirements
 
@@ -45,7 +70,7 @@ The project is designed for artifact-based analysis rather than live cluster mut
 │   ├── config.py             # Runtime settings
 │   ├── llm.py                # LLM client integration
 │   ├── prompts.py            # System and user prompts
-│   ├── local_analyze.py      # Report path helpers and legacy local analysis modules
+│   ├── local_analyze.py      # Report path helpers and local analysis utilities
 │   └── report.py             # Report builder
 ├── helm/kubeoptix-analyzer/  # Helm chart for OpenShift deployment
 │   ├── templates/            # Kubernetes manifests
@@ -60,7 +85,7 @@ The project is designed for artifact-based analysis rather than live cluster mut
 ├── run-ocp.sh               # Minimal entry script for OpenShift runtime
 ├── requirements.txt          # Python dependencies
 ├── README.md                 # Project documentation
-├── .env.example              # Example environment config (if present in the repo)
+├── .env.example              # Local environment template
 └── data/                     # Runtime data directory expected at runtime
 ```
 
@@ -71,18 +96,35 @@ In OpenShift, runtime credentials are loaded from the platform API:
 - `GET {SYSTEM_SETTINGS_URL}/system-settings`
 - fields used: `cursorApiKey`, `cursorModel`, `llmApiKey`, `llmModel`, `status`
 
-For local development, configure `.env`:
+For local development, copy `.env.example` to `.env` and configure one provider:
 
 ```dotenv
 SYSTEM_SETTINGS_URL=http://localhost:8000
 
-# Optional fallback when SYSTEM_SETTINGS_URL is not set
-# CURSOR_API_KEY=
-# CURSOR_MODEL=composer-2.5
-# LLM_API_KEY=
-# LLM_BASE_URL=https://api.openai.com/v1
-# LLM_MODEL=gpt-4o-mini
+# Cursor SDK provider
+CURSOR_API_KEY=
+CURSOR_MODEL=composer-2.5
+
+# OpenAI-compatible provider
+LLM_API_KEY=
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
 ```
+
+`SYSTEM_SETTINGS_URL` points to a service exposing `GET /system-settings`. The analyzer reads `cursorApiKey`, `cursorModel`, `llmApiKey`, `llmModel`, and `status` from its JSON response. When the URL is configured locally but unavailable, the application warns and falls back to `.env`. In a container or OpenShift, an unreachable or missing system-settings service stops startup rather than silently continuing.
+
+The following runtime variables are also supported:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `KUBEOPTIX_API_HOST` | `0.0.0.0` | HTTP bind address |
+| `KUBEOPTIX_API_PORT` | `8000` | HTTP port |
+| `KUBEOPTIX_RUN_SCRIPT` | `run-ocp.sh` | Script invoked by the API for each namespace |
+| `KUBEOPTIX_API_TIMEOUT_S` | `7200` | Per-namespace API execution timeout |
+| `KUBEOPTIX_PROGRESS_WINDOW_S` | `18` | Estimated progress window for each phase |
+| `AGENT_MAX_ITERATIONS` | `20` | Maximum LLM/tool iterations |
+| `AGENT_MAX_FILE_CHARS` | `20000` | Maximum file content read by the agent |
+| `SYSTEM_SETTINGS_TIMEOUT_S` | `30` | System Settings API timeout |
 
 The Helm chart exposes runtime configuration through `values.yaml`:
 
@@ -95,10 +137,35 @@ The Helm chart exposes runtime configuration through `values.yaml`:
 
 The API runtime directories are fixed:
 
-- `/app/data/assessment`
-- `/app/data/reports`
+- assessment input: `data/assessment` relative to the application root (in the container, `/app/data/assessment`);
+- report output: `/app/data/reports`.
 
-The `api.py` service accepts a POST request to `/run` with `namespaces`, and exposes a `GET /status` endpoint for progress reporting.
+The Helm persistence volume is mounted at `/app/data`, so it must contain the assessment folders and should be enabled when reports or collected artifacts must survive pod replacement.
+
+## Artifact Layout
+
+The API discovers namespace directories below `data/assessment`, excluding the reserved `worknodes/` directory. The CLI accepts either a directory containing one namespace or a directory containing multiple namespaces.
+
+Canonical layout:
+
+```text
+data/assessment/
+├── worknodes/                         # Optional worker-node YAML/inventory
+└── my-namespace/
+  ├── resources/
+  │   ├── deployments.apps/
+  │   ├── services/
+  │   ├── routes.route.openshift.io/
+  │   ├── configmaps/
+  │   ├── pods/
+  │   ├── horizontalpodautoscalers.autoscaling/
+  │   ├── clusterserviceversions.operators.coreos.com/
+  │   ├── subscriptions.operators.coreos.com/
+  │   └── packagemanifests.packages.operators.coreos.com/
+  └── pods-logs/                     # .log and .txt files
+```
+
+The analyzer also supports the legacy `apps/<application>/<resource-type>/` layout and `pod-logs/`. YAML files are deduplicated when both layouts contain the same Kubernetes object. If no recognizable namespace subdirectory exists, the CLI treats the input directory itself as one namespace.
 
 ## Installation
 
@@ -125,6 +192,8 @@ The repository also ships with an installer helper:
 ```bash
 ./install.sh -f ./helm/kubeoptix-analyzer/values.example.yaml
 ```
+
+`install.sh` requires both `helm` and `oc`, an authenticated OpenShift session, an existing `shiftwise-ai` namespace (or the namespace selected through the script environment), and a values file. By default it performs two phases: it deploys the `BuildConfig`/`ImageStream`, starts a binary build from the local workspace, then deploys the `StatefulSet` and checks `/health` through the Service. Git source settings are passed to Helm, but local binary build mode is enabled by default (`BUILD_FROM_LOCAL=true`).
 
 ## Helm Configuration
 
@@ -179,6 +248,18 @@ The local execution path is driven by the project scripts:
 ./run.sh --artifacts ./data/assessment --report ./data/reports
 ```
 
+The report argument can be either a Markdown file or an output directory. If omitted, the default is `<artifacts>/assessment-report.md`. `run.sh` creates `.venv` when needed and installs `requirements.txt` on every invocation; use `python -m agent` directly when dependencies are already installed.
+
+Examples:
+
+```bash
+# Cursor SDK provider selected automatically when CURSOR_API_KEY is set
+./run.sh --artifacts ./data/assessment --report ./data/reports/assessment.md
+
+# Force an OpenAI-compatible provider
+./run.sh --llm --artifacts ./data/assessment --report ./data/reports/assessment.md
+```
+
 The analyzer expects a prepared artifact tree similar to:
 
 ```text
@@ -190,6 +271,35 @@ The analyzer expects a prepared artifact tree similar to:
 ```
 
 The output report is written to the selected report path or to the default generated report inside the artifact directory.
+
+## HTTP API
+
+Start the service locally with:
+
+```bash
+python api.py
+```
+
+The service listens on `http://0.0.0.0:8000` by default. It exposes:
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Returns `{"status":"ok"}` |
+| `GET` | `/status` or `/analysis/status` | Returns the current progress as a plain integer from 0 to 100 |
+| `GET` | `/assessment/folders` or `/assessment/namespaces` | Lists namespace folders under the assessment directory |
+| `GET` | `/reports` or `/reports/files` | Lists generated report files and timestamps |
+| `POST` | `/run` | Analyzes one or more namespaces sequentially |
+| `DELETE` | `/reports` | Deletes all entries in the report directory |
+
+Run an analysis by sending either a comma-separated string or a JSON array. The request is rejected when a namespace does not exist or another analysis is already running:
+
+```bash
+curl -X POST http://localhost:8000/run \
+  -H 'Content-Type: application/json' \
+  -d '{"namespaces":["my-namespace","another-namespace"]}'
+```
+
+The response contains the selected namespaces, input/output directories, invoked command, exit code, stdout, stderr, and report path for each namespace. A successful run returns HTTP 200; a run with one or more namespace failures returns HTTP 500. Poll `/status` while processing and use `/reports` to discover generated files.
 
 ## Development
 
@@ -208,7 +318,13 @@ Then run the analyzer directly:
 python -m agent --artifacts ./data/assessment
 ```
 
-The repository does not include a dedicated test suite in the visible project tree, so validation is primarily done through CLI execution, artifact inspection, and deployment checks.
+Run the available test suite with:
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
+The tests currently focus on Markdown image embedding. End-to-end LLM analysis and OpenShift deployment checks require credentials, prepared artifacts, and a cluster, so they are not run as part of the local unit test command.
 
 ## Container
 
@@ -232,90 +348,13 @@ The installation flow in `install.sh` performs a two-phase deployment:
 ## Troubleshooting
 
 - If the artifact directory is missing or malformed, the analyzer exits with a clear path error.
-- If `SYSTEM_SETTINGS_URL` is unreachable, returns inactive status, or provides no API keys, the runtime stops before analysis begins.
-- If the Helm installation cannot find the release namespace or build config, verify the namespace exists and the chart was installed with the correct values file.
+- If `SYSTEM_SETTINGS_URL` is unreachable, returns inactive status, or provides no usable credentials in OpenShift, inspect the configuration service and its `/system-settings` response.
+- If no credentials are available, set `CURSOR_API_KEY` or `LLM_API_KEY`; `--llm` specifically requires `LLM_API_KEY`.
+- If the API reports that a namespace is missing, inspect `/assessment/folders` and verify that the folder name matches exactly.
+- If the Helm installation cannot find the release namespace or BuildConfig, verify the namespace exists, `oc whoami` is authenticated, and the chart was installed with the correct values file.
 - If the application fails health checks, inspect the pod logs and the service proxy status in OpenShift.
+- If reports disappear after a pod restart, enable chart persistence and mount a PVC at `/app/data`.
 
 ## License
 
-No explicit license file was identified in this repository, so no license is documented here.
-
-When you run the wrapper script for the first time, it will:
-
-1. Resolve the project root.
-2. Create `.venv/` if it does not exist.
-3. Activate the virtual environment.
-4. Upgrade `pip`.
-5. Install dependencies from `requirements.txt`.
-6. Start `python -m agent` with the same CLI arguments.
-
-### 3. Run the analyzer
-
-```bash
-./run.sh --artifacts ./artifacts
-```
-
-Custom report path:
-
-```bash
-./run.sh --artifacts ./artifacts --report ./out/assessment-report.md
-```
-
-### 4. How analysis works
-
-- loads credentials from `GET /system-settings` when `SYSTEM_SETTINGS_URL` is configured
-- if `cursorApiKey` is present, uses Cursor SDK
-- otherwise, if `llmApiKey` is present, uses an OpenAI-compatible API and a tool-driven ReAct loop
-- writes a single Markdown report in Brazilian Portuguese to the artifact directory or the path passed with `--report`
-
-### 5. Review the output
-
-By default, the generated file is:
-
-```text
-<artifacts>/assessment-report.md
-```
-
-The report covers inventory, topology, resources, observability, ConfigMap security checks, findings, action plan, and references.
-
-## Internal analyzer flow
-
-1. Prepared artifacts directory
-2. `run.sh` creates or reuses `.venv` and installs dependencies
-3. `python -m agent` loads `/system-settings` credentials
-4. Provider branch:
-   - **Cursor** — Cursor SDK prompt over the artifact directory
-   - **OpenAI-compatible** — inventory artifacts and tool-driven ReAct loop
-5. Write Markdown report with PNG charts/diagrams in `report_assets/` (matplotlib + KubeDiagrams)
-
-## What the assessment covers
-
-- namespace discovery
-- application inventory
-- topology inferred from Deployments, Services, Routes, and ConfigMaps
-- CPU and memory requests and limits
-- worker-node allocatable and capacity totals
-- HPA and observability-related resources
-- log error patterns such as crashes, OOM, timeouts, and connection failures
-- risky configuration patterns in manifests and ConfigMaps
-- operator inventory from CSVs, Subscriptions, and PackageManifests
-
-## Main commands
-
-Show CLI help:
-
-```bash
-python -m agent --help
-```
-
-Run analysis directly:
-
-```bash
-python -m agent --artifacts ./artifacts
-```
-
-## Notes
-
-- The analyzer is offline with respect to cluster access. It only reads local artifacts.
-- The quality of the report depends on the completeness of the collected artifacts.
-- Generative analysis does not replace artifact sanitization. Sensitive-data removal should happen upstream in the harvester pipeline.
+No license file is currently included in the repository.
