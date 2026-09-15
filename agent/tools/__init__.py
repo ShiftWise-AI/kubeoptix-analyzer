@@ -10,10 +10,22 @@ from agent.tools.base import FunctionTool, object_schema
 from agent.tools.filesystem import build_filesystem_tools
 from agent.tools.logs import build_log_tools
 from agent.tools.manifests import build_manifest_tools
+from agent.tools.visualization import build_visualization_tools
+from agent.visualization.pregenerate import NamespaceVisualizations, sanitize_section_markdown
+from agent.visualization.report_assets import ReportAssets
 
 
-def build_report_tools(report: ReportBuilder) -> list[FunctionTool]:
+def build_report_tools(
+    report: ReportBuilder,
+    artifacts_dir: Path,
+    report_dir: Path | None = None,
+) -> list[FunctionTool]:
     def write_report_section(title: str, body: str) -> str:
+        body = sanitize_section_markdown(
+            body,
+            artifacts_dir=artifacts_dir,
+            report_dir=report_dir,
+        )
         report.add_section(title, body)
         return f"Section '{title}' registered ({len(body)} chars)."
 
@@ -47,12 +59,17 @@ def build_all_tools(
     artifacts_dir: Path,
     report: ReportBuilder,
     max_file_chars: int,
+    *,
+    assets: ReportAssets,
+    visualizations: list[NamespaceVisualizations],
+    report_dir: Path | None = None,
 ) -> list[FunctionTool]:
     tools: list[FunctionTool] = []
     tools.extend(build_filesystem_tools(artifacts_dir, max_file_chars))
     tools.extend(build_manifest_tools(artifacts_dir))
     tools.extend(build_log_tools(artifacts_dir))
-    tools.extend(build_report_tools(report))
+    tools.extend(build_visualization_tools(artifacts_dir, assets, visualizations))
+    tools.extend(build_report_tools(report, artifacts_dir, report_dir=report_dir))
     return tools
 
 

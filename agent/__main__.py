@@ -1,24 +1,36 @@
-"""CLI: PYTHONPATH=src python -m agent --artifacts ./folder [--report path]."""
+"""CLI: python -m agent --artifacts ./folder [--report path] [--llm]."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from agent.config import validate_llm_env
-from agent.local_analyze import resolve_report_path
 from agent.system_settings import SettingsLoadError, load_runtime_settings
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
 
+def _report_stats(path: Path) -> None:
+    content = path.read_text(encoding="utf-8")
+    embedded = content.count("data:image/png;base64,")
+    relative = len(re.findall(r"!\[[^\]]*\]\([^)]*report_assets[^)]*\)", content))
+    print(f"[agent] Report written to: {path}")
+    print(f"[agent] Embedded {embedded} PNG image(s) in markdown body")
+    if relative:
+        print(f"[agent] Warning: {relative} unembedded image reference(s) remain")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OpenShift assessment via generative LLM (Cursor SDK or OpenAI-compatible API)."
+        description=(
+            "OpenShift assessment via Cursor SDK or OpenAI-compatible LLM (ReAct + tools)."
+        )
     )
     parser.add_argument(
         "--artifacts",
@@ -35,6 +47,11 @@ def main() -> None:
             "(default: <artifacts>/assessment-report.md)"
         ),
     )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="Force OpenAI-compatible LLM API (requires LLM_API_KEY)",
+    )
     args = parser.parse_args()
 
     artifacts = Path(args.artifacts)
@@ -49,11 +66,26 @@ def main() -> None:
     cursor_key = os.getenv("CURSOR_API_KEY", "").strip()
     openai_key = os.getenv("LLM_API_KEY", "").strip()
 
+    if args.llm:
+        if not openai_key:
+            raise SystemExit(
+                "--llm requires LLM_API_KEY (configure via SYSTEM_SETTINGS_URL or .env)."
+            )
+        from agent.agent import run_assessment
+        from agent.config import get_settings
+
+        settings = get_settings()
+        print("[agent] Provider: OpenAI-compatible API (--llm)")
+        print(f"[agent] Model: {settings.llm_model}")
+        out = run_assessment(artifacts, settings, report_path=report)
+        _report_stats(out)
+        return
+
     if cursor_key:
         from agent.cursor_assess import run_cursor_assessment
 
         out = run_cursor_assessment(artifacts, report)
-        print(f"[agent] Report written to: {out}")
+        _report_stats(out)
         return
 
     if openai_key:
@@ -61,19 +93,15 @@ def main() -> None:
         from agent.config import get_settings
 
         settings = get_settings()
-        out = run_assessment(artifacts, settings)
-        if report is not None:
-            dest = resolve_report_path(artifacts, report)
-            if out.resolve() != dest:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
-                print(f"[agent] Report copied to: {dest}")
-        print(f"[agent] Report written to: {out}")
+        print("[agent] Provider: OpenAI-compatible API")
+        print(f"[agent] Model: {settings.llm_model}")
+        out = run_assessment(artifacts, settings, report_path=report)
+        _report_stats(out)
         return
 
     raise SystemExit(
-        "Could not start analysis because the .env credentials are empty.\n"
-        "Set CURSOR_API_KEY or LLM_API_KEY and try again."
+        "Could not start analysis: no credentials available.\n"
+        "Configure CURSOR_API_KEY or LLM_API_KEY via system settings or .env."
     )
 
 

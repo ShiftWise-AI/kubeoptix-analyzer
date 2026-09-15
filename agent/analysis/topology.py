@@ -28,15 +28,7 @@ class TopologyResult:
     http_deps: list[tuple[str, str]] = field(default_factory=list)  # app -> app
     config_refs: list[tuple[str, str]] = field(default_factory=list)  # app -> configmap/secret
     edges: list[Edge] = field(default_factory=list)
-    mermaid: str = ""
     human_summary: list[str] = field(default_factory=list)
-
-
-def _safe_id(name: str) -> str:
-    cleaned = "".join(c if c.isalnum() else "_" for c in name)
-    if cleaned and cleaned[0].isdigit():
-        cleaned = f"n_{cleaned}"
-    return cleaned or "node"
 
 
 def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
@@ -123,7 +115,6 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
     for src, dst in result.http_deps:
         result.edges.append(Edge(src, dst, "calls"))
 
-    result.mermaid = _render_mermaid_simple(result)
     result.human_summary = _human_summary(result)
     return result
 
@@ -161,38 +152,13 @@ def _human_summary(topo: TopologyResult) -> list[str]:
     return lines
 
 
-def _render_mermaid_simple(topo: TopologyResult) -> str:
-    """Simple top-to-bottom diagram: user -> apps and apps -> apps."""
-    lines = [
-        "flowchart TB",
-        '  usuario["User / Internet"]',
-    ]
-    declared: set[str] = {"usuario"}
-
-    def node(app: str) -> str:
-        nid = _safe_id(app)
-        if nid not in declared:
-            declared.add(nid)
-            label = app.replace('"', "'")
-            lines.append(f'  {nid}["{label}"]')
-        return nid
-
-    for app in topo.apps:
-        node(app)
-
-    # Public entry via Route (grouped by app).
-    routed_apps = {r["app"] for r in topo.routes if r.get("app")}
-    for app in sorted(routed_apps):
-        lines.append(f'  usuario -->|HTTP/HTTPS| {node(app)}')
-
-    # App-to-app dependencies.
-    for src, dst in topo.http_deps:
-        lines.append(f'  {node(src)} -->|calls| {node(dst)}')
-
-    return "\n".join(lines)
-
-
-def render_topology_md(ns_name: str, topo: TopologyResult) -> str:
+def render_topology_md(
+    ns_name: str,
+    topo: TopologyResult,
+    *,
+    ns: NamespaceArtifacts | None = None,
+    assets=None,
+) -> str:
     lines = [
         f"# Reverse architecture — `{ns_name}`",
         "",
@@ -203,14 +169,19 @@ def render_topology_md(ns_name: str, topo: TopologyResult) -> str:
         "",
     ]
     lines.extend(topo.human_summary or ["A summary could not be assembled."])
+    lines.extend(["", "## Diagram", ""])
+    if assets is not None and ns is not None:
+        diagram_md, _engine = assets.render_topology(
+            f"{ns_name}_topology",
+            f"Arquitetura reversa — {ns_name}",
+            ns,
+            topo,
+        )
+        lines.append(diagram_md)
+    else:
+        lines.append("_Diagrama indisponível (assets não configurados)._")
     lines.extend(
         [
-            "",
-            "## Diagram",
-            "",
-            "```mermaid",
-            topo.mermaid,
-            "```",
             "",
             "## Public entry (Routes)",
             "",

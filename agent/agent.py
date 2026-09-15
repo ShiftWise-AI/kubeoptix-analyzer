@@ -12,6 +12,13 @@ from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
 from agent.tools import build_all_tools, openai_tool_schemas, tools_by_name
 from agent.tools.filesystem import build_filesystem_tools
+from agent.local_analyze import resolve_report_path
+from agent.visualization.pregenerate import (
+    append_missing_visualizations,
+    finalize_report_markdown,
+    format_visualization_catalog,
+    generate_all_visualizations,
+)
 
 
 def _initial_inventory(artifacts_dir: Path, max_file_chars: int) -> str:
@@ -31,20 +38,44 @@ def _message_content(message: Any) -> str:
 def run_assessment(
     artifacts_dir: Path,
     settings: Settings,
+    report_path: Path | None = None,
 ) -> Path:
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
         raise SystemExit(f"Invalid artifacts directory: {artifacts_dir}")
 
+    dest = resolve_report_path(artifacts_dir, report_path)
     report = ReportBuilder(artifacts_dir=artifacts_dir)
-    tools = build_all_tools(artifacts_dir, report, settings.max_file_chars)
+    assets, visualizations = generate_all_visualizations(artifacts_dir)
+    viz_catalog = format_visualization_catalog(visualizations)
+    if visualizations:
+        print(
+            f"[agent] Pre-generated {len(visualizations)} namespace visualization set(s) "
+            f"in {assets.assets_dir}"
+        )
+
+    tools = build_all_tools(
+        artifacts_dir,
+        report,
+        settings.max_file_chars,
+        assets=assets,
+        visualizations=visualizations,
+        report_dir=dest.parent,
+    )
     registry = tools_by_name(tools)
     schemas = openai_tool_schemas(tools)
 
     inventory = _initial_inventory(artifacts_dir, settings.max_file_chars)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": build_system_prompt()},
-        {"role": "user", "content": build_user_prompt(str(artifacts_dir), inventory)},
+        {
+            "role": "user",
+            "content": build_user_prompt(
+                str(artifacts_dir),
+                inventory,
+                viz_catalog,
+            ),
+        },
     ]
 
     llm = LLMClient(settings)
@@ -122,6 +153,22 @@ def run_assessment(
                 "O agente atingiu o limite de iterações antes de concluir a análise.",
             )
 
-    out = report.write()
-    print(f"[agent] Report written to: {out}")
-    return out
+    if visualizations:
+        report.sections = append_missing_visualizations(
+            report.sections,
+            visualizations,
+        )
+
+    content = finalize_report_markdown(
+        report.render(),
+        artifacts_dir=artifacts_dir,
+        report_dir=dest.parent,
+        visualizations=visualizations,
+    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
+
+    from agent.visualization.report_postprocess import cleanup_stray_report_scripts
+
+    cleanup_stray_report_scripts(dest.parent)
+    return dest

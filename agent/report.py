@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.visualization.pregenerate import (
+    NamespaceVisualizations,
+    finalize_report_markdown,
+)
+
 
 @dataclass
 class ReportBuilder:
@@ -50,7 +55,17 @@ class ReportBuilder:
                 lines.append("")
         return "\n".join(lines)
 
-    def write(self, filename: str = "assessment-report.md") -> Path:
+    def write(
+        self,
+        filename: str = "assessment-report.md",
+        *,
+        visualizations: list[NamespaceVisualizations] | None = None,
+    ) -> Path:
         out = self.artifacts_dir / filename
-        out.write_text(self.render(), encoding="utf-8")
+        content = finalize_report_markdown(
+            self.render(),
+            artifacts_dir=self.artifacts_dir,
+            visualizations=visualizations,
+        )
+        out.write_text(content, encoding="utf-8")
         return out

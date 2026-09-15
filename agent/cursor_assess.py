@@ -34,8 +34,8 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
      Fonte: `<ns>/resources/clusterserviceversions.operators.coreos.com/`, `subscriptions.operators.coreos.com/`, `packagemanifests.packages.operators.coreos.com/`
 3. Arquitetura reversa
    - Baseada em Deployments, Services, Routes e ConfigMaps
-   - Inclua um diagrama mermaid flowchart TB simples (Usuário → apps e apps → apps)
-   - Sem sintaxe inválida no mermaid (não use parênteses em rótulos de aresta)
+   - Não use Mermaid. Incorpore os blocos Markdown de `list_visualizations` com PNG
+     já embutidos como `data:image/png;base64,...` (nunca use paths `./report_assets/`)
 4. Recursos de CPU e memória
    - 4.1 Lista por aplicação (requests/limits) **com coluna QoS** e **legenda QoS abaixo da tabela** (Guaranteed / Burstable / BestEffort)
    - Sumário do namespace
@@ -45,10 +45,10 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
    - Sugestão conservadora otimizada de CPU/memória por contêiner (Burstable, limit ≈ 2× request)
    - Sugestões de HPA (min/max, target CPU/memória) e exemplos YAML aplicáveis
    - Item de **boas práticas de affinity / anti-affinity** (inventário nos workloads + recomendações podAntiAffinity, nodeAffinity, topologia)
-   - Gráficos pizza mermaid (`pie showData`) quando houver dados
+   - Gráficos de composição em PNG (donut matplotlib) quando houver dados
 5. Observabilidade (métricas, logs, monitoramento)
    - Oportunidades de rastreabilidade e correção de erros
-   - Gráficos pizza de erros por sistema/aplicação e por categoria
+   - Gráficos PNG de erros por sistema/aplicação e por categoria
 6. ConfigMaps e dados sensíveis (secrets, chaves, certificados)
 7. Plano de ação em seções separadas:
    - Ações de infraestrutura do cluster / plataforma
@@ -77,6 +77,11 @@ def run_cursor_assessment(
         ) from exc
 
     from agent.local_analyze import resolve_report_path
+    from agent.visualization.pregenerate import (
+        finalize_report_markdown,
+        format_visualization_catalog,
+        generate_all_visualizations,
+    )
 
     artifacts_dir = artifacts_dir.resolve()
     if not artifacts_dir.is_dir():
@@ -92,8 +97,23 @@ def run_cursor_assessment(
     out = resolve_report_path(artifacts_dir, report_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    assets, visualizations = generate_all_visualizations(artifacts_dir)
+    viz_catalog = format_visualization_catalog(visualizations)
+    if visualizations:
+        print(
+            f"[agent] Pre-generated {len(visualizations)} namespace visualization set(s) "
+            f"in {assets.assets_dir}"
+        )
+
     model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
     prompt = ASSESSMENT_PROMPT.format(report_path=str(out))
+    if viz_catalog.strip():
+        prompt = (
+            f"{prompt}\n\n"
+            "Visualizações PNG já geradas (incorpore os blocos Markdown abaixo nas seções "
+            "correspondentes do relatório; não gere novamente se os arquivos já existem):\n\n"
+            f"{viz_catalog}\n"
+        )
 
     print(f"[agent] LLM mode via Cursor SDK")
     print(f"[agent] Artifacts (cwd): {artifacts_dir}")
@@ -131,4 +151,18 @@ def run_cursor_assessment(
     else:
         print(f"[agent] Report generated at: {out}")
 
+    content = out.read_text(encoding="utf-8")
+    final = finalize_report_markdown(
+        content,
+        artifacts_dir=artifacts_dir,
+        report_dir=out.parent,
+        visualizations=visualizations,
+    )
+    out.write_text(final, encoding="utf-8")
+    embedded_count = final.count("data:image/png;base64,")
+    print(f"[agent] Embedded {embedded_count} PNG image(s) into report body")
+
+    from agent.visualization.report_postprocess import cleanup_stray_report_scripts
+
+    cleanup_stray_report_scripts(out.parent)
     return out

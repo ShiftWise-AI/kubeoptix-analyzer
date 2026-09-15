@@ -13,13 +13,15 @@ ENV LOG_DIR=/app/logs/ \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     KUBEOPTIX_API_HOST=0.0.0.0 \
-    KUBEOPTIX_API_PORT=8000
+    KUBEOPTIX_API_PORT=8000 \
+    MPLCONFIGDIR=/tmp/matplotlib
 
 ENV PATH=/app/.venv/bin:$PATH
 
 RUN dnf install -y \
     python3 \
     python3-pip \
+    graphviz \
     && dnf update -y \
     && dnf clean all \
     && useradd -m -s /bin/bash kubeoptix \
@@ -41,7 +43,12 @@ RUN find /app/agent -type d \( -name "__pycache__" -o -name ".pytest_cache" -o -
 
 RUN python3 -m venv $VENV_DIR \
     && $VENV_DIR/bin/pip install --upgrade pip \
-    && $VENV_DIR/bin/pip install --no-cache-dir -r requirements.txt 
+    && $VENV_DIR/bin/pip install --no-cache-dir "pygraphviz==2.0.1" \
+    && $VENV_DIR/bin/pip install --no-cache-dir --no-deps "KubeDiagrams==0.8.0" \
+    && $VENV_DIR/bin/pip install --no-cache-dir diagrams graphviz2drawio \
+    && $VENV_DIR/bin/pip install --no-cache-dir -r requirements.txt \
+    && $VENV_DIR/bin/kube-diagrams --help >/dev/null \
+    && dot -V >/dev/null
 
 EXPOSE 8000
 

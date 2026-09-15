@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 from agent.system_settings import SettingsLoadError, load_runtime_settings
+from agent.visualization.report_postprocess import postprocess_report_file
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -534,6 +535,14 @@ class ApiHandler(BaseHTTPRequestHandler):
 
                 if completed.returncode != 0:
                     has_error = True
+
+                if report_file.is_file():
+                    postprocess = postprocess_report_file(report_file, namespace_dir)
+                    print(
+                        f"[api] Post-processed {report_file.name}: "
+                        f"{postprocess['embedded']} PNG(s) embedded, "
+                        f"removed scripts={postprocess['removed_scripts']}"
+                    )
 
                 run_results.append(
                     {
