@@ -36,7 +36,7 @@ podEnv:
   TZ: ""
 
 systemSettings:
-  url: ""
+  url: "http://configurations-api:8000"
 
 env:
   LLM_BASE_URL: https://api.openai.com/v1

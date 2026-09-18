@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
+_CURSOR_MODEL_ALIASES = {
+    "deafult": "default",
+}
+
 
 ASSESSMENT_PROMPT = """\
 Você é um especialista em OpenShift/Kubernetes. Analise os artefatos neste diretório
@@ -105,7 +109,10 @@ def run_cursor_assessment(
             f"in {assets.assets_dir}"
         )
 
-    model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
+    raw_model = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
+    model = _CURSOR_MODEL_ALIASES.get(raw_model.lower(), raw_model)
+    if model != raw_model:
+        print(f"[agent] Warning: normalized CURSOR_MODEL={raw_model!r} to {model!r}")
     prompt = ASSESSMENT_PROMPT.format(report_path=str(out))
     if viz_catalog.strip():
         prompt = (
