@@ -50,7 +50,7 @@ def main() -> None:
     parser.add_argument(
         "--llm",
         action="store_true",
-        help="Force OpenAI-compatible LLM API (requires LLM_API_KEY)",
+        help="Force Cursor SDK LLM mode (requires CURSOR_API_KEY)",
     )
     args = parser.parse_args()
 
@@ -67,17 +67,13 @@ def main() -> None:
     openai_key = os.getenv("LLM_API_KEY", "").strip()
 
     if args.llm:
-        if not openai_key:
+        if not cursor_key:
             raise SystemExit(
-                "--llm requires LLM_API_KEY (configure via SYSTEM_SETTINGS_URL or .env)."
+                "--llm requires CURSOR_API_KEY (configure via SYSTEM_SETTINGS_URL or .env)."
             )
-        from agent.agent import run_assessment
-        from agent.config import get_settings
+        from agent.cursor_assess import run_cursor_assessment
 
-        settings = get_settings()
-        print("[agent] Provider: OpenAI-compatible API (--llm)")
-        print(f"[agent] Model: {settings.llm_model}")
-        out = run_assessment(artifacts, settings, report_path=report)
+        out = run_cursor_assessment(artifacts, report)
         _report_stats(out)
         return
 

@@ -37,7 +37,7 @@ Pre-generated visualizations + LLM analysis
 Markdown report with embedded PNGs
 ```
 
-The LLM provider is selected in this order for the CLI: Cursor SDK when `CURSOR_API_KEY` is available, OpenAI-compatible API when `LLM_API_KEY` is available, or the OpenAI-compatible API explicitly with `--llm`. The API delegates provider selection to the same CLI script.
+The LLM provider is selected in this order for the CLI: Cursor SDK when `CURSOR_API_KEY` is available, OpenAI-compatible API when `LLM_API_KEY` is available, or Cursor SDK explicitly with `--llm`. The API delegates provider selection to the same CLI script.
 
 ## Requirements
 
@@ -256,7 +256,7 @@ Examples:
 # Cursor SDK provider selected automatically when CURSOR_API_KEY is set
 ./run.sh --artifacts ./data/assessment --report ./data/reports/assessment.md
 
-# Force an OpenAI-compatible provider
+# Force Cursor SDK provider
 ./run.sh --llm --artifacts ./data/assessment --report ./data/reports/assessment.md
 ```
 
@@ -349,7 +349,7 @@ The installation flow in `install.sh` performs a two-phase deployment:
 
 - If the artifact directory is missing or malformed, the analyzer exits with a clear path error.
 - If `SYSTEM_SETTINGS_URL` is unreachable, returns inactive status, or provides no usable credentials in OpenShift, inspect the configuration service and its `/system-settings` response.
-- If no credentials are available, set `CURSOR_API_KEY` or `LLM_API_KEY`; `--llm` specifically requires `LLM_API_KEY`.
+- If no credentials are available, set `CURSOR_API_KEY` or `LLM_API_KEY`; `--llm` specifically requires `CURSOR_API_KEY`.
 - If the API reports that a namespace is missing, inspect `/assessment/folders` and verify that the folder name matches exactly.
 - If the Helm installation cannot find the release namespace or BuildConfig, verify the namespace exists, `oc whoami` is authenticated, and the chart was installed with the correct values file.
 - If the application fails health checks, inspect the pod logs and the service proxy status in OpenShift.
