@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.yaml_util import app_label, load_yaml_docs, meta_name
+from agent.i18n import t
 
 
 @dataclass
@@ -53,8 +54,12 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: :latest image",
-                            f"Container `{cname}` uses `{image}`.",
+                            t("finding.latest_title", app=app),
+                            t(
+                                "finding.latest_detail",
+                                container=cname,
+                                image=image,
+                            ),
                             rel,
                             "aplicacao",
                         )
@@ -63,8 +68,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "alto",
-                            f"{app}: missing readinessProbe",
-                            f"Container `{cname}` is missing a readiness probe.",
+                            t("finding.readiness_title", app=app),
+                            t("finding.readiness_detail", container=cname),
                             rel,
                             "aplicacao",
                         )
@@ -73,8 +78,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: missing livenessProbe",
-                            f"Container `{cname}` is missing a liveness probe.",
+                            t("finding.liveness_title", app=app),
+                            t("finding.liveness_detail", container=cname),
                             rel,
                             "aplicacao",
                         )
@@ -83,8 +88,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "alto",
-                            f"{app}: missing resource limits",
-                            f"Container `{cname}` is missing CPU/memory limits.",
+                            t("finding.limits_title", app=app),
+                            t("finding.limits_detail", container=cname),
                             rel,
                             "infraestrutura",
                         )
@@ -93,8 +98,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                     result.items.append(
                         Finding(
                             "medio",
-                            f"{app}: missing resource requests",
-                            f"Container `{cname}` is missing CPU/memory requests.",
+                            t("finding.requests_title", app=app),
+                            t("finding.requests_detail", container=cname),
                             rel,
                             "infraestrutura",
                         )
@@ -103,8 +108,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                 result.items.append(
                     Finding(
                         "baixo",
-                        f"{app}: single replica",
-                        f"{kind}/{name} has replicas=1 — availability risk.",
+                        t("finding.replica_title", app=app),
+                        t("finding.replica_detail", kind=kind, name=name),
                         rel,
                         "infraestrutura",
                     )
@@ -113,14 +118,14 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
     for path in ns.routes:
         for doc in load_yaml_docs(path):
             name = meta_name(doc)
-            host = ((doc.get("spec") or {}).get("host")) or "(sem host)"
+            host = ((doc.get("spec") or {}).get("host")) or t("route.no_host")
             tls = (doc.get("spec") or {}).get("tls")
             if not tls:
                 result.items.append(
                     Finding(
                         "alto",
-                        f"Route/{name}: missing TLS",
-                        f"Host `{host}` is exposed without TLS.",
+                        t("finding.tls_title", name=name),
+                        t("finding.tls_detail", host=host),
                         path.name,
                         "infraestrutura",
                     )
@@ -129,8 +134,8 @@ def analyze_findings(ns: NamespaceArtifacts) -> FindingsResult:
                 result.items.append(
                     Finding(
                         "medio",
-                        f"Route/{name}: insecure HTTP allowed",
-                        f"Host `{host}` has `insecureEdgeTerminationPolicy=Allow`.",
+                        t("finding.insecure_title", name=name),
+                        t("finding.insecure_detail", host=host),
                         path.name,
                         "infraestrutura",
                     )

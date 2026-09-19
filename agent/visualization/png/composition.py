@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+from agent.i18n import t
 from agent.visualization.chart_theme import (
     CHART_COLORS,
     CHART_MUTED_COLOR,
@@ -23,7 +24,7 @@ def _empty_chart(output_path: Path, title: str) -> None:
     ax.text(
         0.5,
         0.5,
-        "Sem dados para exibir",
+        t("chart.empty"),
         ha="center",
         va="center",
         fontsize=12,

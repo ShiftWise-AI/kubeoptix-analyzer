@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.yaml_util import app_label, load_yaml_docs, meta_name
+from agent.i18n import t
 
 SENSITIVE_KEY_RE = re.compile(
     r"(password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|"
@@ -63,7 +64,7 @@ def analyze_configmaps(ns: NamespaceArtifacts) -> ConfigMapSecurityResult:
                             app,
                             key_s,
                             "chave_suspeita",
-                            f"Nome da chave sugere segredo: `{key_s}`",
+                            t("cm.suspicious_key", key=key_s),
                         )
                     )
                 for category, regex in SENSITIVE_VALUE_PATTERNS:
@@ -83,63 +84,48 @@ def analyze_configmaps(ns: NamespaceArtifacts) -> ConfigMapSecurityResult:
                         break
 
     if result.hits:
-        result.recommendations.append(
-            "Move secrets (passwords, tokens, private certificates) from ConfigMap "
-            "to a Secret or external vault (Vault/External Secrets), with rotation."
-        )
-        result.recommendations.append(
-            "Ensure collection pipelines continue masking sensitive values before "
-            "sharing artifacts."
-        )
-        result.recommendations.append(
-            "Review RBAC for reading ConfigMaps/Secrets in the namespace."
+        result.recommendations.extend(
+            [
+                t("cm.rec.move"),
+                t("cm.rec.mask"),
+                t("cm.rec.rbac"),
+            ]
         )
     else:
-        result.recommendations.append(
-            "No strong evidence of secrets in ConfigMaps in the artifacts "
-            "(values may already be sanitized). Validate the build/deploy process to "
-            "prevent regression."
-        )
-        # Database URLs / users in a ConfigMap remain a lower risk, but should still be handled carefully.
-        result.recommendations.append(
-            "Prefer referencing database credentials via Secret even when the JDBC URL "
-            "remains in the ConfigMap."
+        result.recommendations.extend(
+            [
+                t("cm.rec.none"),
+                t("cm.rec.jdbc"),
+            ]
         )
     return result
 
 
 def render_configmaps_md(ns_name: str, result: ConfigMapSecurityResult) -> str:
     lines = [
-        f"# ConfigMap analysis — sensitive information — `{ns_name}`",
+        t("cm.title", name=ns_name),
         "",
-        f"- ConfigMaps analyzed: **{result.scanned}**",
-        f"- With data (`data`/`binaryData`): **{result.with_data}**",
-        f"- Sensitive findings: **{len(result.hits)}**",
+        t("cm.scanned", count=result.scanned),
+        t("cm.with_data", count=result.with_data),
+        t("cm.hits", count=len(result.hits)),
         "",
-        "## Findings",
+        t("cm.findings"),
         "",
     ]
     if not result.hits:
-        lines.append(
-            "No clear evidence of secrets/certificates/tokens in the analyzed ConfigMaps "
-            "(or the data is already sanitized)."
-        )
+        lines.append(t("cm.none"))
         lines.append("")
     else:
-        lines.extend(
-            [
-                "| ConfigMap | App | Key | Category | Evidence (truncated) |",
-                "|-----------|-----|-----|----------|----------------------|",
-            ]
-        )
+        lines.append(t("cm.table"))
         for hit in result.hits:
             ev = hit.evidence.replace("|", "\\|")
+            category = t(f"cm.cat.{hit.category}")
             lines.append(
-                f"| `{hit.configmap}` | `{hit.app}` | `{hit.key}` | {hit.category} | `{ev}` |"
+                f"| `{hit.configmap}` | `{hit.app}` | `{hit.key}` | {category} | `{ev}` |"
             )
         lines.append("")
 
-    lines.extend(["## Recommendations", ""])
+    lines.extend(["", t("cm.recommendations"), ""])
     for idx, rec in enumerate(result.recommendations, start=1):
         lines.append(f"{idx}. {rec}")
     lines.append("")

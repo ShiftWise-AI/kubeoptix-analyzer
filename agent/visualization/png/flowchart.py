@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon
 
+from agent.i18n import t
 from agent.visualization.chart_theme import CHART_MUTED_COLOR
 from agent.visualization.models import DiagramEdge, DiagramNode, FlowchartDataset
 from agent.visualization.png._mpl import save_figure
@@ -200,7 +201,7 @@ def _draw_edge(ax: plt.Axes, source: _NodeLayout, target: _NodeLayout, label: st
 def _empty_chart(output_path: Path, title: str) -> None:
     fig, ax = plt.subplots(figsize=EMPTY_CHART_FIGSIZE)
     ax.axis("off")
-    ax.text(0.5, 0.5, "Sem dados para exibir", ha="center", va="center", fontsize=12, color=CHART_MUTED_COLOR)
+    ax.text(0.5, 0.5, t("chart.empty"), ha="center", va="center", fontsize=12, color=CHART_MUTED_COLOR)
     ax.set_title(title, fontsize=12, fontweight="bold")
     fig.tight_layout()
     save_figure(fig, output_path, profile=layout_profile_for_output(output_path))

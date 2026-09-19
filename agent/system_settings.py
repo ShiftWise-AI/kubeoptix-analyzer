@@ -108,20 +108,27 @@ class SettingsLoadError(RuntimeError):
 
 
 def load_runtime_settings() -> bool:
-    """Fetch platform settings when SYSTEM_SETTINGS_URL is configured."""
+    """Fetch platform settings, including the report language, before analysis."""
+    from agent.i18n import UnsupportedLanguageError, set_report_language
+
     base_url = _settings_base_url()
     if not base_url:
-        if _is_container_or_ocp():
-            raise SettingsLoadError(
-                "SYSTEM_SETTINGS_URL is required in container/OpenShift environments."
-            )
-        return False
+        raise SettingsLoadError(
+            "SYSTEM_SETTINGS_URL is required before report generation "
+            "so the report language can be read from /system-settings."
+        )
 
     settings = fetch_system_settings(base_url)
     if settings.status and settings.status != "active":
         raise SettingsLoadError(
             f"System settings status is '{settings.status}', expected 'active'."
         )
+
+    try:
+        code = set_report_language(settings.language)
+    except UnsupportedLanguageError as exc:
+        raise SettingsLoadError(str(exc)) from exc
+    print(f"[agent] Report language: {code}")
 
     if not (
         settings.cursor_api_key

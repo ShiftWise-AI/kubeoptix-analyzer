@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.i18n import t
 from agent.visualization.pregenerate import (
     NamespaceVisualizations,
     finalize_report_markdown,
@@ -32,18 +33,18 @@ class ReportBuilder:
     def render(self) -> str:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         lines = [
-            "# Relatório de assessment OpenShift",
+            t("report.title"),
             "",
-            f"_Gerado em {now}_",
-            f"_Artefatos: `{self.artifacts_dir}`_",
+            t("report.generated", when=now),
+            t("report.artifacts", path=self.artifacts_dir),
             "",
         ]
         if not self.sections:
             lines.extend(
                 [
-                    "## Sem seções",
+                    t("report.no_sections"),
                     "",
-                    "O agente não registrou seções via `write_report_section`.",
+                    t("report.no_sections_body"),
                     "",
                 ]
             )

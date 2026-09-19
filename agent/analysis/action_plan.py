@@ -6,6 +6,7 @@ from agent.analysis.configmaps_security import ConfigMapSecurityResult
 from agent.analysis.findings import FindingsResult
 from agent.analysis.observability import ObservabilityResult
 from agent.analysis.resources import ResourceAnalysis
+from agent.i18n import severity_label, t
 
 
 def render_action_plan_md(
@@ -19,7 +20,8 @@ def render_action_plan_md(
     apps: list[str] = []
 
     for f in findings.items:
-        bullet = f"- **[{f.severity.upper()}]** {f.title} — {f.detail}"
+        label = severity_label(f.severity).upper()
+        bullet = f"- **[{label}]** {f.title} — {f.detail}"
         if f.area == "infraestrutura":
             infra.append(bullet)
         else:
@@ -28,38 +30,25 @@ def render_action_plan_md(
     if resources.ns_cpu_lim_m and any(
         s.missing_limits or s.missing_requests for s in resources.by_app.values()
     ):
-        infra.append(
-            "- Review the namespace quota/LimitRange and standardize requests/limits "
-            "across all workloads."
-        )
+        infra.append(t("action.review_quota"))
 
     missing_req = [
         s.app for s in resources.by_app.values() if s.missing_requests or s.missing_limits
     ]
     if missing_req:
         infra.append(
-            "- Complete requests/limits in the applications: "
-            + ", ".join(f"`{a}`" for a in sorted(set(missing_req))[:15])
-            + "."
+            t(
+                "action.complete_resources",
+                apps=", ".join(f"`{a}`" for a in sorted(set(missing_req))[:15]),
+            )
         )
 
     for opp in obs.opportunities:
-        text = f"- {opp}"
-        if any(
-            k in opp.lower()
-            for k in (
-                "servicemonitor",
-                "podmonitor",
-                "prometheus",
-                "alerta",
-                "métricas",
-                "metricas",
-                "namespace",
-            )
-        ):
-            infra.append(text)
+        bullet = f"- {opp.text}"
+        if opp.infra:
+            infra.append(bullet)
         else:
-            apps.append(text)
+            apps.append(bullet)
 
     for rec in configmaps.recommendations:
         apps.append(f"- {rec}")
@@ -78,40 +67,39 @@ def render_action_plan_md(
     apps = uniq(apps)
 
     lines = [
-        f"# Action plan — `{ns_name}`",
+        t("action.title", name=ns_name),
         "",
-        "Derived from the assessment reports (findings, resources, observability, "
-        "and ConfigMaps). Split by responsibility.",
+        t("action.intro"),
         "",
-        "## 1. Cluster / platform infrastructure actions",
+        t("action.infra"),
         "",
     ]
     if infra:
         lines.extend(infra)
     else:
-        lines.append("- No priority infrastructure action was identified automatically.")
-    lines.extend(["", "## 2. Application improvement actions", ""])
+        lines.append(t("action.infra_none"))
+    lines.extend(["", t("action.apps"), ""])
     if apps:
         lines.extend(apps)
     else:
-        lines.append("- No priority application action was identified automatically.")
+        lines.append(t("action.apps_none"))
 
     lines.extend(
         [
             "",
-            "## 3. Suggested prioritization",
+            t("action.priority"),
             "",
-            "1. **HIGH** severity items (TLS, limits, probes, secrets).",
-            "2. Observability (monitors, alerts, structured logging).",
-            "3. **MEDIUM/LOW** items (liveness, replicas, image tags).",
+            t("action.p1"),
+            t("action.p2"),
+            t("action.p3"),
             "",
-            "## 4. Acceptance criteria",
+            t("action.accept"),
             "",
-            "- Critical Routes with TLS and without insecure HTTP when applicable.",
-            "- 100% of workloads with defined requests and limits.",
-            "- Critical applications with readiness/liveness checks and ≥2 replicas or HPA.",
-            "- Secrets removed from ConfigMaps; ConfigMaps used only for non-sensitive configuration.",
-            "- Basic metrics and alerts covering error rate and restarts.",
+            t("action.a1"),
+            t("action.a2"),
+            t("action.a3"),
+            t("action.a4"),
+            t("action.a5"),
             "",
         ]
     )

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import Settings
+from agent.i18n import t
 from agent.llm import LLMClient
 from agent.prompts import build_system_prompt, build_user_prompt
 from agent.report import ReportBuilder
@@ -149,8 +150,8 @@ def run_assessment(
         print("[agent] Iteration limit reached.")
         if not report.sections:
             report.add_section(
-                "Resumo incompleto",
-                "O agente atingiu o limite de iterações antes de concluir a análise.",
+                t("report.incomplete_title"),
+                t("report.incomplete_body"),
             )
 
     if visualizations:

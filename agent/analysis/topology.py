@@ -11,6 +11,7 @@ from agent.analysis.yaml_util import (
     load_yaml_docs,
     meta_name,
 )
+from agent.i18n import t, yn
 
 
 @dataclass
@@ -75,7 +76,7 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
     for path in ns.routes:
         for doc in load_yaml_docs(path):
             name = meta_name(doc)
-            host = str(((doc.get("spec") or {}).get("host")) or "(sem host)")
+            host = str(((doc.get("spec") or {}).get("host")) or t("route.no_host"))
             to = str(((doc.get("spec") or {}).get("to") or {}).get("name") or "")
             tls = bool((doc.get("spec") or {}).get("tls"))
             target_app = service_to_app.get(to, to)
@@ -122,33 +123,33 @@ def analyze_topology(ns: NamespaceArtifacts) -> TopologyResult:
 def _human_summary(topo: TopologyResult) -> list[str]:
     lines: list[str] = []
     if topo.routes:
-        lines.append("**Entry (user → application)**")
+        lines.append(t("topo.entry_title"))
         for r in topo.routes:
-            tls = "with TLS" if r["tls"] == "yes" else "without TLS"
+            tls = t("topo.with_tls") if r["tls"] == "yes" else t("topo.without_tls")
             lines.append(
-                f"- User accesses `{r['host']}` ({tls}) and reaches application **{r['app']}**."
+                t("topo.entry_line", host=r["host"], tls=tls, app=r["app"])
             )
     else:
-        lines.append("**Entry:** no Route found (applications are internal only to the cluster).")
+        lines.append(t("topo.no_route"))
 
     if topo.http_deps:
         lines.append("")
-        lines.append("**Calls between applications** (discovered in ConfigMaps)")
+        lines.append(t("topo.calls_title"))
         for src, dst in topo.http_deps:
-            lines.append(f"- **{src}** calls **{dst}**.")
+            lines.append(t("topo.call_line", src=src, dst=dst))
     else:
         lines.append("")
-        lines.append("**Calls between applications:** no explicit internal URL in ConfigMaps.")
+        lines.append(t("topo.no_calls"))
 
     if topo.config_refs:
         lines.append("")
-        lines.append("**Configuration injected into pods**")
+        lines.append(t("topo.config_title"))
         by_app: dict[str, list[str]] = {}
         for app, ref in topo.config_refs:
             by_app.setdefault(app, []).append(ref)
         for app in sorted(by_app):
             refs = ", ".join(f"`{r}`" for r in sorted(set(by_app[app])))
-            lines.append(f"- **{app}** usa {refs}.")
+            lines.append(t("topo.config_line", app=app, refs=refs))
     return lines
 
 
@@ -160,52 +161,51 @@ def render_topology_md(
     assets=None,
 ) -> str:
     lines = [
-        f"# Reverse architecture — `{ns_name}`",
+        t("topo.title", name=ns_name),
         "",
-        "Simple view reconstructed from **Deployments**, **Services**, "
-        "**Routes**, and **ConfigMaps**.",
+        t("topo.intro"),
         "",
-        "## In brief",
+        t("topo.brief"),
         "",
     ]
-    lines.extend(topo.human_summary or ["A summary could not be assembled."])
-    lines.extend(["", "## Diagram", ""])
+    lines.extend(topo.human_summary or [t("topo.fallback")])
+    lines.extend(["", t("topo.diagram"), ""])
     if assets is not None and ns is not None:
         diagram_md, _engine = assets.render_topology(
             f"{ns_name}_topology",
-            f"Arquitetura reversa — {ns_name}",
+            t("viz.title_architecture", namespace=ns_name),
             ns,
             topo,
         )
         lines.append(diagram_md)
     else:
-        lines.append("_Diagrama indisponível (assets não configurados)._")
+        lines.append(t("diagram.unavailable"))
     lines.extend(
         [
             "",
-            "## Public entry (Routes)",
+            t("topo.routes"),
             "",
-            "| Host | Application | TLS |",
-            "|------|-------------|-----|",
+            t("topo.routes_header"),
         ]
     )
     for r in topo.routes:
-        lines.append(f"| `{r['host']}` | **{r['app']}** | {r['tls']} |")
+        tls = yn(r["tls"] == "yes")
+        lines.append(f"| `{r['host']}` | **{r['app']}** | {tls} |")
     if not topo.routes:
         lines.append("| — | — | — |")
 
     lines.extend(
         [
             "",
-            "## Aplicações no namespace",
+            t("topo.apps"),
             "",
         ]
     )
     if topo.apps:
         for app in topo.apps:
             svc = next((s["name"] for s in topo.services if s["target"] == app), "—")
-            lines.append(f"- **{app}** (Service: `{svc}`)")
+            lines.append(t("topo.app_line", app=app, service=svc))
     else:
-        lines.append("- Nenhuma aplicação identificada.")
+        lines.append(t("topo.no_apps"))
     lines.append("")
     return "\n".join(lines)

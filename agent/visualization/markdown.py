@@ -6,6 +6,8 @@ import base64
 import re
 from pathlib import Path
 
+from agent.i18n import t
+
 _MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)(?:\{[^}]*\})?")
 _HTML_IMG_RE = re.compile(
     r'(<img\s[^>]*src=")([^"]+)("[^>]*>)',
@@ -37,7 +39,7 @@ def markdown_image(title: str, image_relpath: str, *, wide: bool = False) -> str
 def embedded_markdown_image(title: str, image_path: Path) -> str:
     """Retorna Markdown com PNG embutido como stream base64 no corpo do arquivo."""
     if not image_path.is_file() or image_path.stat().st_size == 0:
-        return "_Visualização indisponível: arquivo de imagem não encontrado._"
+        return t("viz.missing_file")
     alt = title.replace("[", "").replace("]", "").replace('"', "")
     return f"![{alt}]({png_to_data_uri(image_path)})"
 
