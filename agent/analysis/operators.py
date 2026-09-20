@@ -8,6 +8,7 @@ from typing import Any
 
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.yaml_util import load_yaml_docs, meta_name
+from agent.i18n import t
 
 # OLM Subscription.status.state values (console: "Upgrade available" / "Up to date")
 _STATE_AT_LATEST = "AtLatestKnown"
@@ -212,23 +213,15 @@ def _rel_path(ns_root: Path, path: Path) -> str:
 def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
     """Section 2.6 — operators present in the namespace (always as a Markdown table)."""
     lines = [
-        f"### 2.6 Operators present in the namespace (ClusterServiceVersions) — `{ns_name}`",
+        t("ops.title", name=ns_name),
         "",
-        f"CSVs analyzed: **{result.scanned}** · listed: **{len(result.items)}**",
+        t("ops.counts", scanned=result.scanned, listed=len(result.items)),
         "",
-        (
-            "| Operator (displayName) | CSV | Version | Phase | Upgrade available | "
-            "Provider | Evidence |"
-        ),
-        (
-            "|------------------------|-----|---------|-------|-------------------|"
-            "----------|----------|"
-        ),
+        t("ops.header"),
+        t("ops.separator"),
     ]
     if not result.items:
-        lines.append(
-            "| — | — | — | — | — | — | No CSVs in `resources/clusterserviceversions*` |"
-        )
+        lines.append(f"| — | — | — | — | — | — | {t('ops.empty')} |")
     else:
         for op in result.items:
             lines.append(
@@ -237,17 +230,14 @@ def render_operators_md(ns_name: str, result: OperatorsResult) -> str:
             )
     lines.append("")
     lines.append(
-        "Column **Upgrade available**: value of the `status.state` property "
-        "(in the CSV or corresponding OLM Subscription). Examples: "
-        f"`{_STATE_AT_LATEST}`, `{_STATE_UPGRADE_AVAILABLE}`, "
-        "`UpgradePending`, `UpgradeFailed`. If `status.state` is missing from the artifacts, "
-        "it is inferred from the `currentCSV` in the PackageManifest (default channel); "
-        f"`{_STATE_UNKNOWN}` means no evidence was found."
+        t(
+            "ops.upgrade_note",
+            at_latest=_STATE_AT_LATEST,
+            upgrade=_STATE_UPGRADE_AVAILABLE,
+            unknown=_STATE_UNKNOWN,
+        )
     )
     lines.append("")
-    lines.append(
-        "The CSVs indicate operators available via OLM in the collected scope; they do not, by themselves, "
-        "imply that ServiceMonitor/PodMonitor/PrometheusRule resources are configured for the namespace applications."
-    )
+    lines.append(t("ops.footer"))
     lines.append("")
     return "\n".join(lines)

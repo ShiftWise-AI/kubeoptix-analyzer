@@ -9,6 +9,7 @@ from pathlib import Path
 
 from agent.visualization.markdown import embed_markdown_images, image_search_dirs
 from agent.visualization.report_postprocess import postprocess_report_file
+from agent.i18n import clear_report_language, set_report_language
 
 _MIN_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -63,6 +64,8 @@ class MarkdownEmbedTests(unittest.TestCase):
             (report_dir / "report_assets" / "architecture.png").write_bytes(_MIN_PNG)
             report_file = report_dir / "shiftwise-ai.md"
             report_file.write_text(_ARCH_MD)
+            set_report_language("pt-br")
+            self.addCleanup(clear_report_language)
 
             result = postprocess_report_file(report_file, artifacts)
             content = report_file.read_text()

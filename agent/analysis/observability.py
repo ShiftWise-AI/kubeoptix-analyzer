@@ -9,6 +9,7 @@ from pathlib import Path
 
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.yaml_util import load_yaml_docs, meta_name
+from agent.i18n import t
 
 ERROR_PATTERNS = [
     ("ERROR", re.compile(r"\bERROR\b|\bError\b")),
@@ -44,6 +45,12 @@ class LogHit:
 
 
 @dataclass
+class Opportunity:
+    text: str
+    infra: bool = False
+
+
+@dataclass
 class ObservabilityResult:
     log_hits: list[LogHit] = field(default_factory=list)
     errors_by_app: Counter = field(default_factory=Counter)
@@ -52,7 +59,7 @@ class ObservabilityResult:
     pod_monitors: list[str] = field(default_factory=list)
     prometheus_rules: list[str] = field(default_factory=list)
     apps_without_monitor: list[str] = field(default_factory=list)
-    opportunities: list[str] = field(default_factory=list)
+    opportunities: list[Opportunity] = field(default_factory=list)
     sample_limit: int = 100
 
 
@@ -97,46 +104,27 @@ def analyze_observability(
                     break
 
     if not result.service_monitors and not result.pod_monitors:
-        result.opportunities.append(
-            "There is no ServiceMonitor/PodMonitor in the namespace — an opportunity to "
-            "expose metrics through the Prometheus Operator for SLIs/SLOs."
-        )
+        result.opportunities.append(Opportunity(t("obs.no_monitors"), infra=True))
     if result.apps_without_monitor:
+        shown = ", ".join(f"`{a}`" for a in result.apps_without_monitor[:20])
+        suffix = "…" if len(result.apps_without_monitor) > 20 else ""
         result.opportunities.append(
-            "Applications without a dedicated monitor: "
-            + ", ".join(f"`{a}`" for a in result.apps_without_monitor[:20])
-            + ("…" if len(result.apps_without_monitor) > 20 else "")
-            + "."
+            Opportunity(t("obs.apps_without", apps=shown, suffix=suffix))
         )
     if not result.prometheus_rules:
-        result.opportunities.append(
-            "No PrometheusRule is present — create alerts for error rate, latency, "
-            "and pod restarts."
-        )
+        result.opportunities.append(Opportunity(t("obs.no_rules"), infra=True))
     if result.errors_by_app:
         top = result.errors_by_app.most_common(3)
-        result.opportunities.append(
-            "Concentrate error remediation on applications with the highest occurrence counts: "
-            + ", ".join(f"`{a}` ({n})" for a, n in top)
-            + "."
-        )
+        apps = ", ".join(f"`{a}` ({n})" for a, n in top)
+        result.opportunities.append(Opportunity(t("obs.top_errors", apps=apps)))
     if result.errors_by_category.get("Exception") or result.errors_by_category.get(
         "ERROR"
     ):
-        result.opportunities.append(
-            "Standardize structured logging (JSON) with `trace_id`/`correlation_id` "
-            "to improve operational traceability across services."
-        )
+        result.opportunities.append(Opportunity(t("obs.structured")))
     if any("previous" in f.name for f in ns.log_files):
-        result.opportunities.append(
-            "There are `-previous` logs (restarted pods) — investigate restart causes "
-            "(OOM, probe failures, crashes) and correlate with events."
-        )
+        result.opportunities.append(Opportunity(t("obs.previous")))
     if not result.opportunities:
-        result.opportunities.append(
-            "Few signs of observability gaps in the artifacts; validate dashboards and "
-            "runbooks in the operating environment."
-        )
+        result.opportunities.append(Opportunity(t("obs.few")))
     return result
 
 
@@ -147,9 +135,9 @@ def render_observability_md(
     assets=None,
 ) -> str:
     lines = [
-        f"# Observability — logs, metrics, and monitoring — `{ns_name}`",
+        t("obs.title", name=ns_name),
         "",
-        "## Monitoring inventory",
+        t("obs.inventory"),
         "",
         f"- ServiceMonitors: **{len(obs.service_monitors)}**"
         + (f" (`{', '.join(obs.service_monitors)}`)" if obs.service_monitors else ""),
@@ -158,24 +146,24 @@ def render_observability_md(
         f"- PrometheusRules: **{len(obs.prometheus_rules)}**"
         + (f" (`{', '.join(obs.prometheus_rules)}`)" if obs.prometheus_rules else ""),
         "",
-        "## Gráfico — erros por aplicação/sistema",
+        t("obs.chart_app"),
         "",
     ]
     if assets is not None:
         lines.append(
             assets.render_composition(
                 f"{ns_name}_errors_by_app",
-                "Erros por aplicação",
+                t("viz.title_errors_app"),
                 obs.errors_by_app,
                 include_other=True,
             )
         )
     else:
-        lines.append("_Gráfico indisponível (assets não configurados)._")
+        lines.append(t("viz.unavailable"))
     lines.extend(
         [
             "",
-            "## Gráfico — erros por categoria",
+            t("obs.chart_cat"),
             "",
         ]
     )
@@ -183,22 +171,14 @@ def render_observability_md(
         lines.append(
             assets.render_composition(
                 f"{ns_name}_errors_by_category",
-                "Erros por categoria",
+                t("viz.title_errors_cat"),
                 obs.errors_by_category,
                 include_other=True,
             )
         )
     else:
-        lines.append("_Gráfico indisponível (assets não configurados)._")
-    lines.extend(
-        [
-            "",
-            "## Quantitative table by application",
-            "",
-            "| Application | Occurrences | % of total |",
-            "|-------------|-------------|-----------|",
-        ]
-    )
+        lines.append(t("viz.unavailable"))
+    lines.extend(["", t("obs.table_title"), "", t("obs.table")])
     total_errors = sum(obs.errors_by_app.values()) or 1
     if obs.errors_by_app:
         for app, n in obs.errors_by_app.most_common():
@@ -207,9 +187,9 @@ def render_observability_md(
     else:
         lines.append("| — | 0 | 0% |")
 
-    lines.extend(["", "## Sample log evidence", ""])
+    lines.extend(["", t("obs.samples"), ""])
     if not obs.log_hits:
-        lines.append("No error patterns were found in the collected logs.")
+        lines.append(t("obs.no_patterns"))
         lines.append("")
     else:
         by_app: dict[str, list[LogHit]] = defaultdict(list)
@@ -224,8 +204,8 @@ def render_observability_md(
                 )
             lines.append("")
 
-    lines.extend(["## Improvement opportunities (traceability and remediation)", ""])
+    lines.extend(["", t("obs.opportunities"), ""])
     for idx, opp in enumerate(obs.opportunities, start=1):
-        lines.append(f"{idx}. {opp}")
+        lines.append(f"{idx}. {opp.text}")
     lines.append("")
     return "\n".join(lines)

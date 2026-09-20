@@ -6,6 +6,7 @@ from pathlib import Path
 
 from agent.analysis.discovery import discover_namespaces
 from agent.analysis.topology import analyze_topology
+from agent.i18n import t
 from agent.tools.base import FunctionTool, object_schema
 from agent.visualization.pregenerate import (
     NamespaceVisualizations,
@@ -29,7 +30,7 @@ def build_visualization_tools(
         data: dict[str, int | float],
     ) -> str:
         if not data:
-            return "Nenhum dado fornecido para o gráfico."
+            return t("tool.no_data")
         normalized = {str(key): float(value) for key, value in data.items()}
         return assets.render_composition(viz_id, title, normalized)
 
@@ -37,12 +38,12 @@ def build_visualization_tools(
         namespaces = {ns.name: ns for ns in discover_namespaces(artifacts_dir)}
         ns = namespaces.get(namespace)
         if ns is None:
-            available = ", ".join(sorted(namespaces)) or "(nenhum)"
-            return f"Namespace '{namespace}' não encontrado. Disponíveis: {available}"
+            available = ", ".join(sorted(namespaces)) or t("tool.none")
+            return t("tool.ns_missing", namespace=namespace, available=available)
         topo = analyze_topology(ns)
         markdown, engine = assets.render_topology(
             f"{namespace}_topology",
-            f"Arquitetura reversa — {namespace}",
+            t("viz.title_architecture", namespace=namespace),
             ns,
             topo,
         )
@@ -52,7 +53,7 @@ def build_visualization_tools(
         nonlocal catalog
         _, catalog = generate_all_visualizations(artifacts_dir)
         return (
-            f"Visualizações regeneradas para {len(catalog)} namespace(s).\n\n"
+            f"{t('tool.regenerated', count=len(catalog))}\n\n"
             + format_visualization_catalog(catalog)
         )
 

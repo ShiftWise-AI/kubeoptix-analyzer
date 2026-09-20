@@ -281,6 +281,38 @@ def _resolve_file_created_at(path: Path) -> datetime:
     return datetime.fromtimestamp(created_ts).astimezone()
 
 
+def missing_markdown_reports(reports_dir: Path, namespace_names: list[str]) -> list[str]:
+    """Namespaces whose ``<name>.md`` report is not on disk yet."""
+    missing: list[str] = []
+    for name in namespace_names:
+        if not (reports_dir / f"{name}.md").is_file():
+            missing.append(name)
+    return missing
+
+
+def finalize_status_if_reports_ready(
+    reports_dir: Path,
+    namespace_names: list[str],
+    *,
+    final_wrapup_start: int,
+    progress_window_s: float,
+) -> bool:
+    """Reach 100 / done only after every namespace markdown file exists.
+
+    A finished subprocess is not enough: the status stays below 100 when the
+    report was not written, so clients do not treat a missing file as ready.
+    """
+    missing = missing_markdown_reports(reports_dir, namespace_names)
+    if missing:
+        print(f"[api] Markdown report not written for: {', '.join(missing)}")
+        _update_status(phase="error", running=False)
+        return False
+
+    _set_phase("finalizing", final_wrapup_start, 100, progress_window_s * 0.4)
+    _update_status(progress=100, phase="done", running=False)
+    return True
+
+
 def _list_report_files_with_dates(reports_dir: Path) -> list[dict[str, str]]:
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -536,6 +568,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if completed.returncode != 0:
                     has_error = True
 
+                result = {
+                    "namespace": namespace_dir.name,
+                    "report": str(report_file),
+                    "command": command,
+                    "exit_code": completed.returncode,
+                    "stdout": completed.stdout,
+                    "stderr": completed.stderr,
+                }
                 if report_file.is_file():
                     postprocess = postprocess_report_file(report_file, namespace_dir)
                     print(
@@ -543,23 +583,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                         f"{postprocess['embedded']} PNG(s) embedded, "
                         f"removed scripts={postprocess['removed_scripts']}"
                     )
+                    _update_status(progress=namespace_end)
+                else:
+                    has_error = True
+                    result["error"] = "markdown report was not written"
+                    print(f"[api] Markdown report was not written: {report_file}")
 
-                run_results.append(
-                    {
-                        "namespace": namespace_dir.name,
-                        "report": str(report_file),
-                        "command": command,
-                        "exit_code": completed.returncode,
-                        "stdout": completed.stdout,
-                        "stderr": completed.stderr,
-                    }
-                )
-
-                _update_status(progress=namespace_end)
+                run_results.append(result)
                 current_start = namespace_end
 
-            _set_phase("finalizing", final_wrapup_start, 100, progress_window_s * 0.4)
-            _update_status(progress=100, phase="done", running=False)
+            if not finalize_status_if_reports_ready(
+                reports_dir,
+                [namespace_dir.name for namespace_dir in namespace_dirs],
+                final_wrapup_start=final_wrapup_start,
+                progress_window_s=progress_window_s,
+            ):
+                has_error = True
 
             payload = {
                 "namespaces": [ns.name for ns in namespace_dirs],

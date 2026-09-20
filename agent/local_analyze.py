@@ -1,4 +1,4 @@
-"""Orchestration of local analysis into a single pt-BR Markdown report."""
+"""Orchestration of local analysis into a localized Markdown report."""
 
 from __future__ import annotations
 
@@ -12,10 +12,11 @@ from agent.analysis.discovery import discover_namespaces, list_apps
 from agent.analysis.findings import analyze_findings
 from agent.analysis.observability import analyze_observability, render_observability_md
 from agent.analysis.operators import analyze_operators, render_operators_md
-from agent.analysis.references import REFERENCES_MD
+from agent.analysis.references import render_references_md
 from agent.analysis.resources import analyze_resources, render_resources_md
 from agent.analysis.topology import analyze_topology, render_topology_md
 from agent.analysis.worknodes import discover_worknodes
+from agent.i18n import severity_label, t
 from agent.visualization import ReportAssets
 from agent.visualization.markdown import embed_markdown_images, image_search_dirs
 def resolve_report_path(
@@ -46,18 +47,19 @@ def _demote_headings(md: str, levels: int = 1) -> str:
 
 def _render_findings_block(ns_name: str, findings) -> str:
     lines = [
-        f"### Achados de configuração — `{ns_name}`",
+        t("findings.heading", name=ns_name),
         "",
     ]
     if not findings.items:
-        lines.append("Nenhum achado pelas heurísticas locais.")
+        lines.append(t("findings.none"))
         lines.append("")
         return "\n".join(lines)
 
     order = {"alto": 0, "medio": 1, "baixo": 2}
     for f in sorted(findings.items, key=lambda x: order.get(x.severity, 9)):
         loc = f" (`{f.path}`)" if f.path else ""
-        lines.append(f"- **[{f.severity.upper()}]** {f.title}{loc} — {f.detail}")
+        label = severity_label(f.severity).upper()
+        lines.append(f"- **[{label}]** {f.title}{loc} — {f.detail}")
     lines.append("")
     return "\n".join(lines)
 
@@ -79,12 +81,12 @@ def run_local_assessment(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     parts: list[str] = [
-        "# Relatório de assessment OpenShift",
+        t("report.title"),
         "",
-        f"_Gerado em {now} (análise local, sem LLM)_",
-        f"_Artefatos: `{artifacts_dir}`_",
+        t("report.generated_local", when=now),
+        t("report.artifacts", path=artifacts_dir),
         "",
-        "## Sumário executivo",
+        t("section.executive"),
         "",
     ]
 
@@ -105,43 +107,55 @@ def run_local_assessment(
             sev[f.severity] = sev.get(f.severity, 0) + 1
 
         exec_summary.append(
-            f"- Namespace `{ns.name}`: **{len(apps)}** apps, "
-            f"**{len(findings.items)}** achados "
-            f"(alto={sev.get('alto', 0)}, médio={sev.get('medio', 0)}, "
-            f"baixo={sev.get('baixo', 0)}), "
-            f"**{sum(obs.errors_by_app.values())}** ocorrências em logs, "
-            f"**{len(cms.hits)}** indícios sensíveis em ConfigMaps"
+            t(
+                "exec.namespace",
+                name=ns.name,
+                apps=len(apps),
+                findings=len(findings.items),
+                high=sev.get("alto", 0),
+                medium=sev.get("medio", 0),
+                low=sev.get("baixo", 0),
+                logs=sum(obs.errors_by_app.values()),
+                hits=len(cms.hits),
+            )
         )
         exec_summary.append(
-            f"  - CPU req/lim: **{resources.ns_cpu_req_m:.0f}m** / "
-            f"**{resources.ns_cpu_lim_m:.0f}m** · "
-            f"Memória req/lim: **{resources.ns_mem_req_mi:.0f}Mi** / "
-            f"**{resources.ns_mem_lim_mi:.0f}Mi**"
+            t(
+                "exec.resources",
+                cpu_req=f"{resources.ns_cpu_req_m:.0f}",
+                cpu_lim=f"{resources.ns_cpu_lim_m:.0f}",
+                mem_req=f"{resources.ns_mem_req_mi:.0f}",
+                mem_lim=f"{resources.ns_mem_lim_mi:.0f}",
+            )
         )
         if worknodes.nodes:
             exec_summary.append(
-                f"  - Workers: **{len(worknodes.nodes)}** nodes · "
-                f"CPU allocatable **{worknodes.total_cpu_alloc_m:.0f}m** · "
-                f"Mem allocatable **{worknodes.total_mem_alloc_mi:.0f}Mi**"
+                t(
+                    "exec.workers",
+                    count=len(worknodes.nodes),
+                    cpu=f"{worknodes.total_cpu_alloc_m:.0f}",
+                    mem=f"{worknodes.total_mem_alloc_mi:.0f}",
+                )
             )
 
+        apps_line = (
+            t("inv.apps", count=len(apps), names=", ".join(apps))
+            if apps
+            else t("inv.apps_none")
+        )
         body_parts.extend(
             [
-                f"## Namespace `{ns.name}`",
+                t("section.namespace", name=ns.name),
                 "",
-                "### Inventário",
+                t("section.inventory"),
                 "",
-                (
-                    f"- Aplicações: **{len(apps)}** (`{', '.join(apps)}`)"
-                    if apps
-                    else "- Aplicações: **0**"
-                ),
-                f"- Deployments/workloads: **{len(ns.deployments)}**",
-                f"- Services: **{len(ns.services)}**",
-                f"- Routes: **{len(ns.routes)}**",
-                f"- ConfigMaps: **{len(ns.configmaps)}**",
-                f"- ClusterServiceVersions (operadores): **{len(operators.items)}**",
-                f"- Arquivos de log: **{len(ns.log_files)}**",
+                apps_line,
+                t("inv.workloads", count=len(ns.deployments)),
+                t("inv.services", count=len(ns.services)),
+                t("inv.routes", count=len(ns.routes)),
+                t("inv.configmaps", count=len(ns.configmaps)),
+                t("inv.operators", count=len(operators.items)),
+                t("inv.logs", count=len(ns.log_files)),
                 "",
                 render_operators_md(ns.name, operators),
                 _render_findings_block(ns.name, findings),
@@ -167,7 +181,7 @@ def run_local_assessment(
         )
 
     if not exec_summary:
-        exec_summary.append("- Nenhum namespace encontrado nos artefatos.")
+        exec_summary.append(t("exec.none"))
 
     parts.extend(exec_summary)
     parts.append("")
@@ -176,7 +190,7 @@ def run_local_assessment(
     parts.extend(body_parts)
     parts.append("---")
     parts.append("")
-    parts.append(REFERENCES_MD.strip())
+    parts.append(render_references_md().strip())
     parts.append("")
 
     content = "\n".join(parts)

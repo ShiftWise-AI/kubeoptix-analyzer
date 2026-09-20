@@ -9,6 +9,7 @@ from pathlib import Path
 
 from agent.analysis.discovery import NamespaceArtifacts
 from agent.analysis.topology import TopologyResult
+from agent.i18n import t
 from agent.visualization.kubediagrams import is_kubediagrams_available, render_manifests
 from agent.visualization.markdown import embedded_markdown_image
 from agent.visualization.models import (
@@ -57,7 +58,7 @@ def topology_flowchart_dataset(topo: TopologyResult, title: str) -> FlowchartDat
             nodes.append(DiagramNode(id=node_id, node_type=node_type, label=label))
         return node_id
 
-    user_id = ensure_node("usuario", "Usuário / Internet", "external")
+    user_id = ensure_node("usuario", t("diagram.user"), "external")
     app_ids: dict[str, str] = {}
     for app in topo.apps:
         app_ids[app] = ensure_node(_safe_id(app), app, "workload")
@@ -79,7 +80,7 @@ def topology_flowchart_dataset(topo: TopologyResult, title: str) -> FlowchartDat
                 source_id=app_ids.get(src, ensure_node(_safe_id(src), src, "workload")),
                 target_id=app_ids.get(dst, ensure_node(_safe_id(dst), dst, "workload")),
                 edge_type="calls",
-                label="calls",
+                label=t("diagram.calls"),
             )
         )
 
@@ -117,9 +118,9 @@ class ReportAssets:
             shown = sum(value for _, value in items)
             total = sum(data.values())
             if total > shown:
-                items.append(("outros", total - shown))
+                items.append((t("chart.other"), total - shown))
         if not items:
-            return "_Visualização indisponível: sem dados._"
+            return t("viz.no_data")
 
         dataset = CompositionDataset(
             title=title,
@@ -143,7 +144,7 @@ class ReportAssets:
         if manifests and is_kubediagrams_available() and render_manifests(manifests, output):
             self._last_diagram_engine = "kubediagrams"
             lines = [
-                "_Diagrama gerado a partir dos manifests YAML do namespace (KubeDiagrams)._",
+                t("diagram.kube"),
                 "",
                 embedded_markdown_image(title, output),
             ]
@@ -153,8 +154,7 @@ class ReportAssets:
         render_flowchart_png(dataset, output)
         self._last_diagram_engine = "matplotlib"
         lines = [
-            "_Diagrama simplificado gerado localmente (matplotlib). "
-            "Para diagrama completo de arquitetura, instale `kube-diagrams` e Graphviz `dot`._",
+            t("diagram.matplotlib"),
             "",
             embedded_markdown_image(title, output),
         ]

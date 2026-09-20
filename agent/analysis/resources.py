@@ -16,6 +16,7 @@ from agent.analysis.yaml_util import (
     parse_cpu,
     parse_memory_mi,
 )
+from agent.i18n import t, yn
 
 # Conservative baselines when requests/limits are missing (per-container values).
 DEFAULT_CPU_REQ_M = 100.0
@@ -197,8 +198,9 @@ def _suggest_pair(
 ) -> tuple[float, float, list[str]]:
     """Conservative suggestion for a resource (request, limit) pair."""
     notes: list[str] = []
+    label = t("kind.cpu") if kind == "CPU" else t("kind.memory")
     if req is None and lim is None:
-        notes.append(f"{kind}: ausentes — baseline conservadora {default_req}/{default_lim}")
+        notes.append(t("suggest.missing", kind=label, req=default_req, lim=default_lim))
         return default_req, default_lim, notes
 
     if req is None and lim is not None:
@@ -212,7 +214,7 @@ def _suggest_pair(
         else:
             sug_lim = _round_mem_mi(lim)
             sug_req = _round_mem_mi(lim / LIMIT_TO_REQUEST_RATIO)
-        notes.append(f"{kind}: só limit definido — request sugerido ≈ 50% do limit")
+        notes.append(t("suggest.limit_only", kind=label))
         return sug_req, sug_lim, notes
 
     if lim is None and req is not None:
@@ -222,7 +224,7 @@ def _suggest_pair(
         else:
             sug_req = _round_mem_mi(req)
             sug_lim = _round_mem_mi(req * LIMIT_TO_REQUEST_RATIO)
-        notes.append(f"{kind}: só request definido — limit sugerido ≈ 2× request")
+        notes.append(t("suggest.request_only", kind=label))
         return sug_req, sug_lim, notes
 
     assert req is not None and lim is not None
@@ -233,7 +235,7 @@ def _suggest_pair(
         else:
             sug_req = _round_mem_mi(req)
             sug_lim = _round_mem_mi(req * LIMIT_TO_REQUEST_RATIO)
-        notes.append(f"{kind}: limit < request — corrigido para limit ≈ 2× request")
+        notes.append(t("suggest.limit_lt_request", kind=label))
         return sug_req, sug_lim, notes
 
     ratio = lim / req if req > 0 else LIMIT_TO_REQUEST_RATIO
@@ -245,8 +247,12 @@ def _suggest_pair(
             sug_req = _round_mem_mi(req)
             sug_lim = _round_mem_mi(req * LIMIT_TO_REQUEST_RATIO)
         notes.append(
-            f"{kind}: burst alto (limit/request={ratio:.1f}) — "
-            f"sugerido apertar limit para ≈ {LIMIT_TO_REQUEST_RATIO:.0f}× request"
+            t(
+                "suggest.burst",
+                kind=label,
+                ratio=f"{ratio:.1f}",
+                factor=f"{LIMIT_TO_REQUEST_RATIO:.0f}",
+            )
         )
         return sug_req, sug_lim, notes
 
@@ -257,9 +263,7 @@ def _suggest_pair(
         else:
             sug_lim = _round_mem_mi(lim)
             sug_req = _round_mem_mi(lim * 0.7)
-        notes.append(
-            f"{kind}: Guaranteed (req=lim) — sugerido Burstable com request ≈ 70% do limit"
-        )
+        notes.append(t("suggest.guaranteed", kind=label))
         return sug_req, sug_lim, notes
 
     # Already reasonable: keep as-is, only round.
@@ -416,17 +420,21 @@ def analyze_resources(
         # Conservative cap: do not suggest more than 6 without load evidence.
         max_replicas = min(max_replicas, 6)
         rationale_parts = [
-            f"minReplicas={min_replicas} (HA: evitar réplica única)",
-            f"maxReplicas={max_replicas} (escala moderada, teto conservador)",
-            "targetCPUUtilization=70% (margem antes do throttling)",
+            t("hpa.reason_min", min_replicas=min_replicas),
+            t("hpa.reason_max", max_replicas=max_replicas),
+            t("hpa.reason_cpu"),
         ]
         if existing:
             rationale_parts.append(
-                f"Já existe HPA `{existing.name}` "
-                f"(min={existing.min_replicas}, max={existing.max_replicas}) — revisar valores."
+                t(
+                    "hpa.reason_exists",
+                    name=existing.name,
+                    min_replicas=existing.min_replicas,
+                    max_replicas=existing.max_replicas,
+                )
             )
         else:
-            rationale_parts.append("Nenhum HPA encontrado para este workload.")
+            rationale_parts.append(t("hpa.reason_none"))
 
         result.hpa_suggestions.append(
             HpaSuggestion(
@@ -538,24 +546,18 @@ def _pct(part: float, whole: float) -> str:
 def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) -> list[str]:
     wn = analysis.worknodes
     lines: list[str] = [
-        "## Capacidade dos worker nodes",
+        t("wn.title"),
         "",
     ]
     if wn is None or not wn.nodes:
-        lines.extend(
-            [
-                "_Nenhum YAML em `worknodes/` encontrado. Execute "
-                "`./scripts/oc_collect_worknodes.sh -o <pasta-saida>` antes do assessment._",
-                "",
-            ]
-        )
+        lines.extend([t("wn.missing"), ""])
         return lines
 
     lines.extend(
         [
-            f"Fonte: `{wn.source_dir}` — valores de **allocatable** (o que o scheduler pode usar).",
+            t("wn.source", path=wn.source_dir),
             "",
-            "| Node | CPU allocatable | Memória allocatable | CPU capacity | Memória capacity |",
+            t("wn.header"),
             "|------|-----------------|---------------------|--------------|------------------|",
         ]
     )
@@ -566,7 +568,7 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
             f"{format_mem_mi(n.mem_cap_mi)} |"
         )
     lines.append(
-        f"| **Total** | **{format_cpu_m(wn.total_cpu_alloc_m)}** "
+        f"| **{t('table.total')}** | **{format_cpu_m(wn.total_cpu_alloc_m)}** "
         f"(**{wn.total_cpu_alloc_m:.0f}m**) | "
         f"**{format_mem_mi(wn.total_mem_alloc_mi)}** | "
         f"**{format_cpu_m(wn.total_cpu_cap_m)}** | "
@@ -575,15 +577,11 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
     lines.extend(
         [
             "",
-            "**Legenda — colunas de CPU e memória**",
+            t("wn.legend_title"),
             "",
-            "- **CPU allocatable / Memória allocatable**: capacidade efetiva que o "
-            "scheduler pode usar para pods (`status.allocatable`). Já desconta "
-            "reservas do sistema/kubelet.",
-            "- **CPU capacity / Memória capacity**: capacidade bruta do node "
-            "(`status.capacity`), incluindo o que fica reservado à plataforma.",
-            "- Use **allocatable** nos comparativos de sizing do namespace; "
-            "**capacity** serve apenas como referência do hardware.",
+            t("wn.legend_alloc"),
+            t("wn.legend_cap"),
+            t("wn.legend_use"),
             "",
         ]
     )
@@ -597,40 +595,37 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
 
     lines.extend(
         [
-            f"## Comparativos — workers × namespace `{ns_name}`",
+            t("cmp.title", name=ns_name),
             "",
-            "### 1) Disponível × request do namespace",
+            t("cmp.h1"),
             "",
-            "| Recurso | Disponível (workers) | Request namespace | Uso do disponível |",
-            "|---------|----------------------|--------------------|-------------------|",
-            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(req_cpu)} | "
+            t("cmp.t1"),
+            f"| {t('kind.cpu')} | {format_cpu_m(avail_cpu)} | {format_cpu_m(req_cpu)} | "
             f"{_pct(req_cpu, avail_cpu)} |",
-            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(req_mem)} | "
+            f"| {t('kind.memory')} | {format_mem_mi(avail_mem)} | {format_mem_mi(req_mem)} | "
             f"{_pct(req_mem, avail_mem)} |",
             "",
-            "### 2) Disponível × limit do namespace",
+            t("cmp.h2"),
             "",
-            "| Recurso | Disponível (workers) | Limit namespace | Uso do disponível |",
-            "|---------|----------------------|----------------|-------------------|",
-            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(lim_cpu)} | "
+            t("cmp.t2"),
+            f"| {t('kind.cpu')} | {format_cpu_m(avail_cpu)} | {format_cpu_m(lim_cpu)} | "
             f"{_pct(lim_cpu, avail_cpu)} |",
-            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(lim_mem)} | "
+            f"| {t('kind.memory')} | {format_mem_mi(avail_mem)} | {format_mem_mi(lim_mem)} | "
             f"{_pct(lim_mem, avail_mem)} |",
             "",
-            "### 3) Disponível × otimizações sugeridas",
+            t("cmp.h3"),
             "",
-            "| Recurso | Disponível | Sug. request | Sug. limit | % req | % lim |",
-            "|---------|------------|--------------|------------|-------|-------|",
-            f"| CPU | {format_cpu_m(avail_cpu)} | {format_cpu_m(sug_req_cpu)} | "
+            t("cmp.t3"),
+            f"| {t('kind.cpu')} | {format_cpu_m(avail_cpu)} | {format_cpu_m(sug_req_cpu)} | "
             f"{format_cpu_m(sug_lim_cpu)} | {_pct(sug_req_cpu, avail_cpu)} | "
             f"{_pct(sug_lim_cpu, avail_cpu)} |",
-            f"| Memória | {format_mem_mi(avail_mem)} | {format_mem_mi(sug_req_mem)} | "
+            f"| {t('kind.memory')} | {format_mem_mi(avail_mem)} | {format_mem_mi(sug_req_mem)} | "
             f"{format_mem_mi(sug_lim_mem)} | {_pct(sug_req_mem, avail_mem)} | "
             f"{_pct(sug_lim_mem, avail_mem)} |",
             "",
-            "## Economia de recursos (simplificada)",
+            t("eco.title"),
             "",
-            "Comparando **valores atuais do namespace** com as **sugestões conservadoras**:",
+            t("eco.intro"),
             "",
         ]
     )
@@ -655,30 +650,42 @@ def _render_worknode_capacity_section(ns_name: str, analysis: ResourceAnalysis) 
 
     lines.extend(
         [
-            "| Comparação | CPU | Memória |",
-            "|------------|-----|---------|",
-            f"| Request atual → sugerido | {_eco_cell(eco_cpu_req, req_cpu, 'cpu')} | "
+            t("eco.header"),
+            f"| {t('eco.req_row')} | {_eco_cell(eco_cpu_req, req_cpu, 'cpu')} | "
             f"{_eco_cell(eco_mem_req, req_mem, 'mem')} |",
-            f"| Limit atual → sugerido | {_eco_cell(eco_cpu_lim, lim_cpu, 'cpu')} | "
+            f"| {t('eco.lim_row')} | {_eco_cell(eco_cpu_lim, lim_cpu, 'cpu')} | "
             f"{_eco_cell(eco_mem_lim, lim_mem, 'mem')} |",
             "",
-            "**Leitura direta:**",
+            t("eco.reading"),
             "",
-            "- **↓** = economia (libera capacidade no scheduler).",
-            "- **↑** = aumento sugerido (ex.: subir de 1 para ≥2 réplicas por HA).",
-            f"- Requests: CPU {_eco_cell(eco_cpu_req, req_cpu, 'cpu')}, "
-            f"memória {_eco_cell(eco_mem_req, req_mem, 'mem')}.",
-            f"- Limits: CPU {_eco_cell(eco_cpu_lim, lim_cpu, 'cpu')}, "
-            f"memória {_eco_cell(eco_mem_lim, lim_mem, 'mem')}.",
-            f"- Uso do pool de workers hoje: requests **{_pct(req_cpu, avail_cpu)}** CPU / "
-            f"**{_pct(req_mem, avail_mem)}** mem; limits **{_pct(lim_cpu, avail_cpu)}** CPU / "
-            f"**{_pct(lim_mem, avail_mem)}** mem.",
-            f"- Com otimizações: requests **{_pct(sug_req_cpu, avail_cpu)}** / "
-            f"**{_pct(sug_req_mem, avail_mem)}**; limits **{_pct(sug_lim_cpu, avail_cpu)}** / "
-            f"**{_pct(sug_lim_mem, avail_mem)}**.",
+            t("eco.down"),
+            t("eco.up"),
+            t(
+                "eco.requests_line",
+                cpu=_eco_cell(eco_cpu_req, req_cpu, "cpu"),
+                mem=_eco_cell(eco_mem_req, req_mem, "mem"),
+            ),
+            t(
+                "eco.limits_line",
+                cpu=_eco_cell(eco_cpu_lim, lim_cpu, "cpu"),
+                mem=_eco_cell(eco_mem_lim, lim_mem, "mem"),
+            ),
+            t(
+                "eco.today",
+                cpu_req=_pct(req_cpu, avail_cpu),
+                mem_req=_pct(req_mem, avail_mem),
+                cpu_lim=_pct(lim_cpu, avail_cpu),
+                mem_lim=_pct(lim_mem, avail_mem),
+            ),
+            t(
+                "eco.opt",
+                cpu_req=_pct(sug_req_cpu, avail_cpu),
+                mem_req=_pct(sug_req_mem, avail_mem),
+                cpu_lim=_pct(sug_lim_cpu, avail_cpu),
+                mem_lim=_pct(sug_lim_mem, avail_mem),
+            ),
             "",
-            "> Estimativa a partir dos manifests (sem métricas reais de uso). "
-            "Validar em homologação antes de alterar recursos em produção.",
+            t("eco.note"),
             "",
         ]
     )
@@ -692,40 +699,49 @@ def render_resources_md(
     assets=None,
 ) -> str:
     lines = [
-        f"# Recursos de CPU e memória — `{ns_name}`",
+        t("res.title", name=ns_name),
         "",
-        "Valores atuais extraídos de `resources.requests` (mínimo reservado) e "
-        "`resources.limits` (teto). Sugestões abaixo são **conservadoras**: priorizam "
-        "estabilidade (Burstable com limit ≈ 2× request), HA (≥2 réplicas) e escala "
-        "moderada via HPA — sem assumir métricas reais de uso (VPA/Prometheus).",
+        t("res.intro"),
         "",
-        "## Sumário do namespace (atual)",
+        t("res.current"),
         "",
-        f"- **CPU requests:** {format_cpu_m(analysis.ns_cpu_req_m)} ({analysis.ns_cpu_req_m:.0f}m)",
-        f"- **CPU limits:** {format_cpu_m(analysis.ns_cpu_lim_m)} ({analysis.ns_cpu_lim_m:.0f}m)",
-        f"- **Memória requests:** {format_mem_mi(analysis.ns_mem_req_mi)}",
-        f"- **Memória limits:** {format_mem_mi(analysis.ns_mem_lim_mi)}",
+        t(
+            "res.cpu_req",
+            value=format_cpu_m(analysis.ns_cpu_req_m),
+            raw=f"{analysis.ns_cpu_req_m:.0f}",
+        ),
+        t(
+            "res.cpu_lim",
+            value=format_cpu_m(analysis.ns_cpu_lim_m),
+            raw=f"{analysis.ns_cpu_lim_m:.0f}",
+        ),
+        t("res.mem_req", value=format_mem_mi(analysis.ns_mem_req_mi)),
+        t("res.mem_lim", value=format_mem_mi(analysis.ns_mem_lim_mi)),
         "",
-        "## Sumário sugerido (conservador, namespace)",
+        t("res.suggested"),
         "",
-        f"- **CPU requests sugeridos:** {format_cpu_m(analysis.ns_sug_cpu_req_m)} "
-        f"({analysis.ns_sug_cpu_req_m:.0f}m)",
-        f"- **CPU limits sugeridos:** {format_cpu_m(analysis.ns_sug_cpu_lim_m)} "
-        f"({analysis.ns_sug_cpu_lim_m:.0f}m)",
-        f"- **Memória requests sugerida:** {format_mem_mi(analysis.ns_sug_mem_req_mi)}",
-        f"- **Memória limits sugerida:** {format_mem_mi(analysis.ns_sug_mem_lim_mi)}",
+        t(
+            "res.cpu_req_sug",
+            value=format_cpu_m(analysis.ns_sug_cpu_req_m),
+            raw=f"{analysis.ns_sug_cpu_req_m:.0f}",
+        ),
+        t(
+            "res.cpu_lim_sug",
+            value=format_cpu_m(analysis.ns_sug_cpu_lim_m),
+            raw=f"{analysis.ns_sug_cpu_lim_m:.0f}",
+        ),
+        t("res.mem_req_sug", value=format_mem_mi(analysis.ns_sug_mem_req_mi)),
+        t("res.mem_lim_sug", value=format_mem_mi(analysis.ns_sug_mem_lim_mi)),
         "",
-        "_Estimativa com réplicas mínimas sugeridas (≥2 quando hoje há 1). "
-        "Validar com métricas reais antes de aplicar em produção._",
+        t("res.estimate"),
         "",
     ]
     lines.extend(_render_worknode_capacity_section(ns_name, analysis))
     lines.extend(
         [
-            "## Por aplicação (atual)",
+            t("res.by_app"),
             "",
-            "| Aplicação | Contêiner | Réplicas | CPU req | CPU lim | Mem req | Mem lim | QoS | HPA |",
-            "|-----------|-----------|----------|---------|---------|---------|---------|-----|-----|",
+            t("res.by_app_header"),
         ]
     )
     if analysis.items:
@@ -733,7 +749,7 @@ def render_resources_md(
             analysis.items, key=lambda i: (i.app, i.workload, i.container)
         ):
             summary = analysis.by_app.get(item.app)
-            hpa = "sim" if summary and summary.has_hpa else "não"
+            hpa = yn(bool(summary and summary.has_hpa))
             lines.append(
                 f"| `{item.app}` | `{item.container}` | {item.replicas} | "
                 f"{format_cpu_m(item.cpu_req_m)} | {format_cpu_m(item.cpu_lim_m)} | "
@@ -746,26 +762,21 @@ def render_resources_md(
     lines.extend(
         [
             "",
-            "**Legenda — coluna QoS**",
+            t("qos.title"),
             "",
-            "- **Guaranteed**: CPU e memória com `request = limit` — maior prioridade "
-            "de scheduling/eviction; sem burst além do request.",
-            "- **Burstable**: há request e/ou limit, porém `request < limit` (ou só "
-            "um dos dois completo) — pode usar burst até o limit; prioridade intermediária.",
-            "- **BestEffort**: sem `requests` nem `limits` — menor prioridade; primeiro "
-            "candidato a eviction sob pressão de memória no node.",
+            t("qos.guaranteed"),
+            t("qos.burstable"),
+            t("qos.besteffort"),
             "",
-            "> **Requests** = mínimo reservado pelo scheduler. "
-            "**Limits** = teto máximo do contêiner.",
+            t("qos.note"),
             "",
-            "## Sugestão conservadora por contêiner",
+            t("res.suggest_title"),
             "",
-            "| App | Workload | Contêiner | CPU req→sug | CPU lim→sug | Mem req→sug | Mem lim→sug | Notas |",
-            "|-----|----------|-----------|-------------|-------------|-------------|-------------|-------|",
+            t("res.suggest_header"),
         ]
     )
     for item in sorted(analysis.items, key=lambda i: (i.app, i.workload, i.container)):
-        notes = "; ".join(item.suggestion_notes) if item.suggestion_notes else "manter faixa atual (arredondada)"
+        notes = "; ".join(item.suggestion_notes) if item.suggestion_notes else t("suggest.keep")
         notes = notes.replace("|", "/")
         lines.append(
             f"| `{item.app}` | `{item.workload}` | `{item.container}` | "
@@ -787,7 +798,7 @@ def render_resources_md(
         lines.extend(
             [
                 "",
-                f"## Exemplo YAML — resources sugeridos (`{example_item.workload}` / `{example_item.container}`)",
+                t("res.yaml_title", workload=example_item.workload, container=example_item.container),
                 "",
                 "```yaml",
                 _yaml_resources_snippet(example_item).rstrip(),
@@ -799,14 +810,17 @@ def render_resources_md(
     # HPA
     lines.extend(
         [
-            "## Sugestões de HPA (conservadoras)",
+            t("hpa.title"),
             "",
-            "| App | Workload | min | max | CPU alvo | Mem alvo | Situação |",
-            "|-----|----------|-----|-----|----------|----------|----------|",
+            t("hpa.header"),
         ]
     )
     for sug in sorted(analysis.hpa_suggestions, key=lambda s: s.app):
-        situ = f"existe `{sug.existing_hpa}`" if sug.existing_hpa else "criar"
+        situ = (
+            t("hpa.exists", name=sug.existing_hpa)
+            if sug.existing_hpa
+            else t("hpa.create")
+        )
         lines.append(
             f"| `{sug.app}` | `{sug.workload}` | {sug.min_replicas} | {sug.max_replicas} | "
             f"{sug.target_cpu}% | {sug.target_memory}% | {situ} |"
@@ -823,22 +837,22 @@ def render_resources_md(
         lines.extend(
             [
                 "",
-                f"### Racional ({sug_ex.app})",
+                t("hpa.rationale", app=sug_ex.app),
                 "",
                 sug_ex.rationale,
                 "",
-                f"## Exemplo YAML — HPA sugerido (`{sug_ex.workload}-hpa`)",
+                t("hpa.yaml_title", name=f"{sug_ex.workload}-hpa"),
                 "",
                 "```yaml",
                 _yaml_hpa_example(ns_name, sug_ex).rstrip(),
                 "```",
                 "",
-                "Notas de aplicação:",
+                t("hpa.notes_title"),
                 "",
-                "- Aplicar HPA apenas em workloads stateless (Deployments); StatefulSets exigem cuidado.",
-                "- `behavior.scaleDown` com janela de 300s reduz flapping.",
-                "- Confirmar que metrics-server (ou monitoramento equivalente) está saudável no cluster.",
-                "- Após aplicar, observar 1–2 ciclos de carga antes de reduzir `maxReplicas` ou apertar targets.",
+                t("hpa.note1"),
+                t("hpa.note2"),
+                t("hpa.note3"),
+                t("hpa.note4"),
                 "",
             ]
         )
@@ -855,28 +869,28 @@ def render_resources_md(
         if s.cpu_lim_m > 0
     }
 
-    lines.extend(["## Gráfico — memória limits atuais por aplicação (Mi)", ""])
+    lines.extend([t("res.chart_mem"), ""])
     if assets is not None:
         lines.append(
             assets.render_composition(
                 f"{ns_name}_mem_limits_by_app",
-                "Memória limits (Mi) por aplicação",
+                t("viz.title_memory"),
                 mem_counter,
             )
         )
     else:
-        lines.append("_Gráfico indisponível (assets não configurados)._")
-    lines.extend(["", "## Gráfico — CPU limits atuais por aplicação (millicores)", ""])
+        lines.append(t("viz.unavailable"))
+    lines.extend(["", t("res.chart_cpu"), ""])
     if assets is not None:
         lines.append(
             assets.render_composition(
                 f"{ns_name}_cpu_limits_by_app",
-                "CPU limits (m) por aplicação",
+                t("viz.title_cpu"),
                 cpu_counter,
             )
         )
     else:
-        lines.append("_Gráfico indisponível (assets não configurados)._")
+        lines.append(t("viz.unavailable"))
     lines.extend(["", *_render_affinity_section(analysis)])
     lines.append("")
     return "\n".join(lines)
@@ -884,20 +898,20 @@ def render_resources_md(
 
 def _render_affinity_section(analysis: ResourceAnalysis) -> list[str]:
     lines = [
-        "## Affinity e anti-affinity — boas práticas",
+        t("aff.title"),
         "",
-        "Inventário nos workloads analisados:",
+        t("aff.inventory"),
         "",
-        "| Workload | App | nodeAffinity | podAffinity | podAntiAffinity |",
+        t("aff.header"),
         "|----------|-----|--------------|-------------|-----------------|",
     ]
     if analysis.affinities:
         for aff in sorted(analysis.affinities, key=lambda a: a.workload):
             lines.append(
                 f"| `{aff.workload}` | `{aff.app}` | "
-                f"{'sim' if aff.has_node_affinity else 'não'} | "
-                f"{'sim' if aff.has_pod_affinity else 'não'} | "
-                f"{'sim' if aff.has_pod_anti_affinity else 'não'} |"
+                f"{yn(aff.has_node_affinity)} | "
+                f"{yn(aff.has_pod_affinity)} | "
+                f"{yn(aff.has_pod_anti_affinity)} |"
             )
     else:
         lines.append("| — | — | — | — | — |")
@@ -908,35 +922,25 @@ def _render_affinity_section(analysis: ResourceAnalysis) -> list[str]:
     lines.extend(
         [
             "",
-            "**Boas práticas sugeridas**",
+            t("aff.practices"),
             "",
-            "1. **podAntiAffinity (obrigatório para HA)** — para Deployments com "
-            "≥2 réplicas, preferir `requiredDuringSchedulingIgnoredDuringExecution` "
-            "(ou `preferred…` em clusters pequenos) com "
-            "`topologyKey: kubernetes.io/hostname`, para espalhar pods em nodes distintos.",
-            "2. **Evitar single point of failure** — réplica única + ausência de "
-            "anti-affinity concentra risco; combine minReplicas≥2 (HPA/Deployment) "
-            "com anti-affinity.",
-            "3. **nodeAffinity / nodeSelector** — use para direcionar a pools "
-            "(worker, infra, GPU) via labels; evite hard-coding de nomes de node.",
-            "4. **podAffinity** — reserve para componentes que realmente precisam "
-            "de localidade (cache local, volumes, latência); uso excessivo gera "
-            "hotspots.",
-            "5. **Zonas** — em clusters multi-AZ, considere "
-            "`topology.kubernetes.io/zone` além de hostname para resiliência a "
-            "falha de zona.",
-            "6. **Não conflitar com taints/tolerations** — affinity deve ser "
-            "coerente com taints dos pools (infra/ODF) para não deixar pods Pending.",
+            t("aff.p1"),
+            t("aff.p2"),
+            t("aff.p3"),
+            t("aff.p4"),
+            t("aff.p5"),
+            t("aff.p6"),
             "",
         ]
     )
     if without_anti:
         names = ", ".join(f"`{a.workload}`" for a in without_anti[:8])
-        extra = f" (+{len(without_anti) - 8} outros)" if len(without_anti) > 8 else ""
+        extra = (
+            t("aff.extra", count=len(without_anti) - 8) if len(without_anti) > 8 else ""
+        )
         lines.extend(
             [
-                f"_Nenhum `podAntiAffinity` encontrado em: {names}{extra}. "
-                "Priorizar esta melhoria nos workloads críticos._",
+                t("aff.missing", names=names, extra=extra),
                 "",
             ]
         )

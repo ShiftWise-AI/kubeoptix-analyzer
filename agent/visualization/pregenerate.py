@@ -10,6 +10,7 @@ from agent.analysis.observability import analyze_observability
 from agent.analysis.resources import analyze_resources
 from agent.analysis.topology import analyze_topology
 from agent.analysis.worknodes import discover_worknodes
+from agent.i18n import t
 from agent.visualization.markdown import (
     embed_markdown_images,
     image_search_dirs,
@@ -41,7 +42,7 @@ def _render_namespace_visualizations(
 
     topology_md, _ = assets.render_topology(
         f"{ns.name}_topology",
-        f"Arquitetura reversa — {ns.name}",
+        t("viz.title_architecture", namespace=ns.name),
         ns,
         topo,
     )
@@ -59,23 +60,23 @@ def _render_namespace_visualizations(
 
     memory_chart_md = assets.render_composition(
         f"{ns.name}_mem_limits_by_app",
-        "Memória limits (Mi) por aplicação",
+        t("viz.title_memory"),
         mem_counter,
     )
     cpu_chart_md = assets.render_composition(
         f"{ns.name}_cpu_limits_by_app",
-        "CPU limits (m) por aplicação",
+        t("viz.title_cpu"),
         cpu_counter,
     )
     errors_by_app_md = assets.render_composition(
         f"{ns.name}_errors_by_app",
-        "Erros por aplicação",
+        t("viz.title_errors_app"),
         obs.errors_by_app,
         include_other=True,
     )
     errors_by_category_md = assets.render_composition(
         f"{ns.name}_errors_by_category",
-        "Erros por categoria",
+        t("viz.title_errors_cat"),
         obs.errors_by_category,
         include_other=True,
     )
@@ -106,32 +107,32 @@ def format_visualization_catalog(
     visualizations: list[NamespaceVisualizations],
 ) -> str:
     if not visualizations:
-        return "Nenhuma visualização foi gerada (nenhum namespace encontrado)."
+        return t("viz.none")
 
     lines = [
-        "Gráficos e diagramas embutidos como PNG base64 no corpo do relatório.",
+        t("viz.intro"),
         "",
     ]
     for viz in visualizations:
         lines.extend(
             [
-                f"### Namespace `{viz.namespace}` — diagrama de arquitetura",
+                t("viz.ns_architecture", namespace=viz.namespace),
                 "",
                 viz.topology_md,
                 "",
-                f"### Namespace `{viz.namespace}` — memória limits por aplicação",
+                t("viz.ns_memory", namespace=viz.namespace),
                 "",
                 viz.memory_chart_md,
                 "",
-                f"### Namespace `{viz.namespace}` — CPU limits por aplicação",
+                t("viz.ns_cpu", namespace=viz.namespace),
                 "",
                 viz.cpu_chart_md,
                 "",
-                f"### Namespace `{viz.namespace}` — erros por aplicação",
+                t("viz.ns_errors_app", namespace=viz.namespace),
                 "",
                 viz.errors_by_app_md,
                 "",
-                f"### Namespace `{viz.namespace}` — erros por categoria",
+                t("viz.ns_errors_cat", namespace=viz.namespace),
                 "",
                 viz.errors_by_category_md,
                 "",
@@ -158,7 +159,7 @@ def append_visualizations_to_markdown(
     if not visualizations or _report_has_embedded_images(content):
         return content
     catalog = format_visualization_catalog(visualizations)
-    return f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
+    return f"{content.rstrip()}\n\n## {t('viz.heading')}\n\n{catalog}\n"
 
 
 def append_missing_visualizations(
@@ -172,7 +173,7 @@ def append_missing_visualizations(
 
     catalog = format_visualization_catalog(visualizations)
     updated = list(sections)
-    updated.append(("Visualizações", catalog))
+    updated.append((t("viz.heading"), catalog))
     return updated
 
 
@@ -204,5 +205,5 @@ def finalize_report_markdown(
     )
     if visualizations and embedded_image_count(content) == 0:
         catalog = format_visualization_catalog(visualizations)
-        content = f"{content.rstrip()}\n\n## Visualizações\n\n{catalog}\n"
+        content = f"{content.rstrip()}\n\n## {t('viz.heading')}\n\n{catalog}\n"
     return strip_local_image_refs(content)
