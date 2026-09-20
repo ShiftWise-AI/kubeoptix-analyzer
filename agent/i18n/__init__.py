@@ -14,6 +14,20 @@ from agent.i18n.prompts import PROMPT_MESSAGES
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("pt-br", "en-us", "es", "it")
 
+# Short / alternate codes returned by system settings UI.
+_LANGUAGE_ALIASES: dict[str, str] = {
+    "en": "en-us",
+    "en_us": "en-us",
+    "eng": "en-us",
+    "pt": "pt-br",
+    "pt_br": "pt-br",
+    "por": "pt-br",
+    "es_es": "es",
+    "spa": "es",
+    "it_it": "it",
+    "ita": "it",
+}
+
 MESSAGES: dict[str, dict[str, str]] = {**_CATALOG_MESSAGES, **PROMPT_MESSAGES}
 
 _language: ContextVar[str | None] = ContextVar("report_language", default=None)
@@ -48,7 +62,9 @@ _validate_catalog()
 
 
 def normalize_language(language: str) -> str:
-    code = (language or "").strip().lower()
+    raw = (language or "").strip().lower()
+    code = raw.replace("_", "-")
+    code = _LANGUAGE_ALIASES.get(raw, _LANGUAGE_ALIASES.get(code, code))
     if code not in SUPPORTED_LANGUAGES:
         raise UnsupportedLanguageError(language)
     return code

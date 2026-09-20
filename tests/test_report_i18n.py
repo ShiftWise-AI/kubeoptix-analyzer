@@ -43,9 +43,23 @@ class ReportLanguageTests(unittest.TestCase):
         clear_report_language()
 
     def test_rejects_unsupported_language(self) -> None:
-        for value in ("", "pt", "en", "fr", "pt_br"):
+        for value in ("", "fr", "de", "english"):
             with self.assertRaises(UnsupportedLanguageError):
                 set_report_language(value)
+
+    def test_accepts_language_aliases(self) -> None:
+        aliases = {
+            "en": "en-us",
+            "EN": "en-us",
+            "en_us": "en-us",
+            "pt": "pt-br",
+            "pt_br": "pt-br",
+            "es_es": "es",
+            "it_it": "it",
+        }
+        for value, expected in aliases.items():
+            self.assertEqual(set_report_language(value), expected)
+            self.assertEqual(get_report_language(), expected)
 
     def test_normalizes_case(self) -> None:
         self.assertEqual(set_report_language("EN-US"), "en-us")
