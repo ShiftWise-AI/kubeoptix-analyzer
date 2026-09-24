@@ -227,10 +227,18 @@ def _progress_worker(stop_event: threading.Event) -> None:
         with _STATUS_LOCK:
             if not _STATUS.running:
                 continue
-            if _STATUS.progress > 100:
-                _STATUS.progress = 100
             if _STATUS.phase in {"done", "error"}:
                 _STATUS.running = False
+                continue
+            elapsed_s = time.monotonic() - _STATUS.phase_started_at
+            _STATUS.progress = _compute_next_progress(
+                _STATUS.progress,
+                _STATUS.phase_start_progress,
+                _STATUS.phase_end_progress,
+                elapsed_s,
+                _STATUS.phase_window_s,
+            )
+            _STATUS.updated_at = time.monotonic()
 
 
 def _current_file_for_namespace(namespace_dir: Path) -> str | None:
