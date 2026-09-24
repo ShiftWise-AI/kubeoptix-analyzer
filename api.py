@@ -240,6 +240,69 @@ def _update_file_progress(
     _update_status(current_file=current_file)
 
 
+def _read_progress_event(progress_path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(progress_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _run_command_with_progress(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    timeout_s: int,
+    progress_path: Path,
+    namespace_dir: Path,
+    tracked_files: set[Path],
+    processed_files: set[Path],
+) -> subprocess.CompletedProcess[str]:
+    result: list[subprocess.CompletedProcess[str]] = []
+    error: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            result.append(
+                subprocess.run(
+                    command,
+                    cwd=str(cwd),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_s,
+                    check=False,
+                )
+            )
+        except BaseException as exc:  # noqa: BLE001
+            error.append(exc)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    while worker.is_alive():
+        event = _read_progress_event(progress_path)
+        current_file = event.get("current_file")
+        event_files = event.get("processed_files")
+        if isinstance(event_files, list):
+            for relative_path in event_files:
+                if not isinstance(relative_path, str):
+                    continue
+                candidate = (namespace_dir / relative_path).resolve()
+                if candidate in tracked_files:
+                    processed_files.add(candidate)
+        _update_file_progress(
+            files_processed=len(processed_files),
+            files_total=len(tracked_files),
+            current_file=current_file if isinstance(current_file, str) else None,
+        )
+        threading.Event().wait(0.25)
+    worker.join()
+    if error:
+        raise error[0]
+    return result[0]
+
+
 def _list_assessment_folder_names(assessment_dir: Path) -> list[str]:
     if not assessment_dir.is_dir():
         raise ValueError(f"Assessment directory not found: {assessment_dir}")
@@ -495,6 +558,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             for namespace_dir in namespace_dirs:
                 report_file = reports_dir / f"{namespace_dir.name}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
+                progress_file = reports_dir / f".{namespace_dir.name}.progress.json"
+                progress_file.unlink(missing_ok=True)
 
                 namespace_files = [
                     path for path in sorted(tracked_files)
@@ -507,16 +572,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
 
                 command = _build_command(namespace_dir, report_file)
+                command_env = os.environ.copy()
+                command_env["KUBEOPTIX_PROGRESS_FILE"] = str(progress_file)
 
                 try:
-                    completed = subprocess.run(
+                    completed = _run_command_with_progress(
                         command,
-                        cwd=str(ROOT_DIR),
-                        env=os.environ.copy(),
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout_s,
-                        check=False,
+                        cwd=ROOT_DIR,
+                        env=command_env,
+                        timeout_s=timeout_s,
+                        progress_path=progress_file,
+                        namespace_dir=namespace_dir,
+                        tracked_files=tracked_files,
+                        processed_files=processed_files,
                     )
                 except subprocess.TimeoutExpired as exc:
                     has_error = True
