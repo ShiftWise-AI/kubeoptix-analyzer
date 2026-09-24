@@ -73,6 +73,24 @@ class FinalizeStatusTests(unittest.TestCase):
 
 
 class ProgressDetailsTests(unittest.TestCase):
+    def test_file_progress_is_capped_before_report_completion(self) -> None:
+        self.assertEqual(api._file_progress(0, 10), 0)
+        self.assertEqual(api._file_progress(5, 10), 49)
+        self.assertEqual(api._file_progress(10, 10), 99)
+
+    def test_inventory_ignores_temporary_and_report_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            namespace_dir = Path(tmp) / "namespace"
+            (namespace_dir / "resources").mkdir(parents=True)
+            (namespace_dir / "resources" / "deployment.yaml").write_text("kind: Deployment")
+            (namespace_dir / "resources" / "deployment.yaml.tmp").write_text("")
+            (namespace_dir / "assessment-report.md").write_text("# report")
+            (namespace_dir / "resources" / "result.lock").write_text("")
+
+            files = api._list_processable_files([namespace_dir])
+
+        self.assertEqual([path.name for path in files], ["deployment.yaml"])
+
     def test_snapshot_status_includes_current_file_and_phase(self) -> None:
         api._update_status(
             progress=47,
