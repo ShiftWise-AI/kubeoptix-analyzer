@@ -288,7 +288,11 @@ def _run_command_with_progress(
             for relative_path in event_files:
                 if not isinstance(relative_path, str):
                     continue
-                candidate = (namespace_dir / relative_path).resolve()
+                candidate_path = Path(relative_path)
+                candidate = (
+                    candidate_path if candidate_path.is_absolute()
+                    else namespace_dir / candidate_path
+                ).resolve()
                 if candidate in tracked_files:
                     processed_files.add(candidate)
         _update_file_progress(

@@ -9,8 +9,22 @@ def build_system_prompt() -> str:
     return t("prompt.system")
 
 
-def build_cursor_prompt(report_path: str) -> str:
-    return t("prompt.cursor", report_path=report_path)
+def build_cursor_prompt(report_path: str, progress_path: str = "") -> str:
+    prompt = t("prompt.cursor", report_path=report_path)
+    if not progress_path:
+        return prompt
+
+    return (
+        f"{prompt}\n\n"
+        "Acompanhe o progresso no arquivo JSON abaixo. Depois de ler cada arquivo "
+        "de artefato, atualize-o atomicamente (escreva um .tmp e renomeie) com este "
+        "formato: {\"current_file\": \"caminho relativo\", "
+        "\"processed_files\": [\"caminho relativo\", ...]}. Inclua somente arquivos "
+        "que realmente foram lidos e mantenha a lista acumulada. Antes de iniciar, "
+        "grave current_file como null e processed_files como []. Não marque o "
+        "relatório final nem arquivos temporários como processados.\n"
+        f"Arquivo de progresso: {progress_path}"
+    )
 
 
 def build_user_prompt(
