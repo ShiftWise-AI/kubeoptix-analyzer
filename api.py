@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass
@@ -331,12 +332,20 @@ def _resolve_file_created_at(path: Path) -> datetime:
     return datetime.fromtimestamp(created_ts).astimezone()
 
 
-def missing_markdown_reports(reports_dir: Path, namespace_names: list[str]) -> list[str]:
-    """Namespaces whose non-empty ``<name>.md`` report is not on disk yet."""
+def missing_markdown_reports(
+    reports_dir: Path,
+    namespace_names: list[str],
+    *,
+    run_started_at: float | None = None,
+) -> list[str]:
+    """Namespaces without a non-empty report created during this execution."""
     missing: list[str] = []
     for name in namespace_names:
         report_path = reports_dir / f"{name}.md"
         if not report_path.is_file() or report_path.stat().st_size == 0:
+            missing.append(name)
+            continue
+        if run_started_at is not None and report_path.stat().st_mtime <= run_started_at:
             missing.append(name)
     return missing
 
@@ -347,13 +356,18 @@ def finalize_status_if_reports_ready(
     *,
     final_wrapup_start: int,
     progress_window_s: float,
+    run_started_at: float | None = None,
 ) -> bool:
     """Reach 100 / done only after every namespace markdown file exists.
 
     A finished subprocess is not enough: the status stays below 100 when the
     report was not written, so clients do not treat a missing file as ready.
     """
-    missing = missing_markdown_reports(reports_dir, namespace_names)
+    missing = missing_markdown_reports(
+        reports_dir,
+        namespace_names,
+        run_started_at=run_started_at,
+    )
     if missing:
         print(f"[api] Markdown report not written for: {', '.join(missing)}")
         _update_status(phase="error", running=False, current_file=None)
@@ -532,6 +546,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         run_results: list[dict] = []
         has_error = False
         reports_dir.mkdir(parents=True, exist_ok=True)
+        run_started_at = time.time()
 
         try:
             load_runtime_settings()
@@ -562,17 +577,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             for namespace_dir in namespace_dirs:
                 report_file = reports_dir / f"{namespace_dir.name}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
+                report_file.unlink(missing_ok=True)
                 progress_file = reports_dir / f".{namespace_dir.name}.progress.json"
                 progress_file.unlink(missing_ok=True)
 
-                namespace_files = [
-                    path for path in sorted(tracked_files)
-                    if namespace_dir in path.parents
-                ]
-                current_file = namespace_files[0].name if namespace_files else None
                 _update_status(
                     phase=f"analyzing {namespace_dir.name}",
-                    current_file=current_file,
+                    current_file=None,
                 )
 
                 command = _build_command(namespace_dir, report_file)
@@ -606,7 +617,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     )
                     _update_status(
                         phase=f"analyzing {namespace_dir.name}",
-                        current_file=current_file,
+                        current_file=None,
                     )
                     continue
                 except OSError as exc:
@@ -624,7 +635,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     )
                     _update_status(
                         phase=f"analyzing {namespace_dir.name}",
-                        current_file=current_file,
+                        current_file=None,
                     )
                     continue
 
@@ -671,6 +682,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 [namespace_dir.name for namespace_dir in namespace_dirs],
                 final_wrapup_start=99,
                 progress_window_s=0,
+                run_started_at=run_started_at,
             ):
                 has_error = True
 

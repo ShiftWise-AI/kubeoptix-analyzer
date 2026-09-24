@@ -53,6 +53,26 @@ class FinalizeStatusTests(unittest.TestCase):
         self.assertEqual(api._STATUS.phase, "done")
         self.assertFalse(api._STATUS.running)
 
+    def test_report_from_before_run_does_not_finish(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports_dir = Path(tmp)
+            report_path = reports_dir / "shiftwise-ai.md"
+            report_path.write_text("# old report\n", encoding="utf-8")
+            old_timestamp = time.time() - 60
+            import os
+
+            os.utime(report_path, (old_timestamp, old_timestamp))
+            ready = api.finalize_status_if_reports_ready(
+                reports_dir,
+                ["shiftwise-ai"],
+                final_wrapup_start=99,
+                progress_window_s=0,
+                run_started_at=time.time(),
+            )
+
+        self.assertFalse(ready)
+        self.assertEqual(api._STATUS.phase, "error")
+
     def test_partial_reports_do_not_finish(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             reports_dir = Path(tmp)
