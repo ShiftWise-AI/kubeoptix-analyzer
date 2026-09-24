@@ -72,5 +72,29 @@ class FinalizeStatusTests(unittest.TestCase):
         self.assertLess(api._snapshot_progress(), 100)
 
 
+class ProgressDetailsTests(unittest.TestCase):
+    def test_snapshot_status_includes_current_file_and_phase(self) -> None:
+        api._update_status(
+            progress=47,
+            running=True,
+            phase="analyzing deployment",
+            current_file="deployment-prod.yaml",
+        )
+
+        status = api._snapshot_status()
+        self.assertEqual(status["progress"], 47)
+        self.assertEqual(status["status"], "running")
+        self.assertEqual(status["phase"], "analyzing deployment")
+        self.assertEqual(status["current_file"], "deployment-prod.yaml")
+
+    def test_snapshot_status_clamps_to_100_and_uses_null_current_file_when_idle(self) -> None:
+        api._update_status(progress=999, running=False, phase="idle", current_file=None)
+
+        status = api._snapshot_status()
+        self.assertEqual(status["progress"], 100)
+        self.assertEqual(status["status"], "idle")
+        self.assertIsNone(status["current_file"])
+
+
 if __name__ == "__main__":
     unittest.main()

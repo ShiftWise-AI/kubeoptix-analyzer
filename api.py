@@ -34,6 +34,7 @@ class ExecutionStatus:
     progress: int = 0
     running: bool = False
     phase: str = "idle"
+    current_file: str | None = None
     phase_start_progress: int = 0
     phase_end_progress: int = 0
     phase_started_at: float = 0.0
@@ -45,6 +46,7 @@ _STATUS_LOCK = threading.Lock()
 _STATUS = ExecutionStatus()
 _STATUS_STOP_EVENT: threading.Event | None = None
 _STATUS_WORKER: threading.Thread | None = None
+_STATUS_NO_VALUE = object()
 
 
 def _build_command(namespace_dir: Path, report_file: Path) -> list[str]:
@@ -125,11 +127,37 @@ def _snapshot_progress() -> int:
         return _STATUS.progress
 
 
+def _status_value() -> str:
+    if _STATUS.phase == "error":
+        return "error"
+    if _STATUS.running:
+        return "running"
+    if _STATUS.phase == "done":
+        return "done"
+    return "idle"
+
+
+def _snapshot_status() -> dict[str, object]:
+    with _STATUS_LOCK:
+        phase = _STATUS.phase
+        progress = _clamp_progress(_STATUS.progress)
+        status = _status_value()
+        current_file = _STATUS.current_file
+        return {
+            "progress": progress,
+            "status": status,
+            "phase": phase,
+            "current_file": current_file,
+            "running": _STATUS.running,
+        }
+
+
 def _update_status(
     *,
     progress: int | None = None,
     running: bool | None = None,
     phase: str | None = None,
+    current_file: str | None | object = _STATUS_NO_VALUE,
     phase_start_progress: int | None = None,
     phase_end_progress: int | None = None,
     phase_started_at: float | None = None,
@@ -142,6 +170,8 @@ def _update_status(
             _STATUS.running = running
         if phase is not None:
             _STATUS.phase = phase
+        if current_file is not _STATUS_NO_VALUE:
+            _STATUS.current_file = current_file or None
         if phase_start_progress is not None:
             _STATUS.phase_start_progress = _clamp_progress(phase_start_progress)
         if phase_end_progress is not None:
@@ -197,23 +227,24 @@ def _progress_worker(stop_event: threading.Event) -> None:
         with _STATUS_LOCK:
             if not _STATUS.running:
                 continue
-            start_progress = _STATUS.phase_start_progress
-            end_progress = _STATUS.phase_end_progress
-            phase_started_at = _STATUS.phase_started_at
-            phase_window_s = _STATUS.phase_window_s
-            current_progress = _STATUS.progress
+            if _STATUS.progress > 100:
+                _STATUS.progress = 100
+            if _STATUS.phase in {"done", "error"}:
+                _STATUS.running = False
 
-        elapsed = max(0.0, time.monotonic() - phase_started_at)
-        next_progress = _compute_next_progress(
-            current_progress=current_progress,
-            start_progress=start_progress,
-            end_progress=end_progress,
-            elapsed_s=elapsed,
-            phase_window_s=phase_window_s,
-        )
 
-        if next_progress > current_progress:
-            _update_status(progress=next_progress)
+def _current_file_for_namespace(namespace_dir: Path) -> str | None:
+    candidates: list[Path] = []
+    roots: list[Path] = [namespace_dir]
+    for root in roots:
+        if not root.exists():
+            continue
+        for pattern in ("*.yaml", "*.yml"):
+            candidates.extend(sorted(root.rglob(pattern)))
+    for file_path in candidates:
+        if file_path.is_file():
+            return file_path.name
+    return None
 
 
 def _start_progress_tracking() -> None:
@@ -305,11 +336,11 @@ def finalize_status_if_reports_ready(
     missing = missing_markdown_reports(reports_dir, namespace_names)
     if missing:
         print(f"[api] Markdown report not written for: {', '.join(missing)}")
-        _update_status(phase="error", running=False)
+        _update_status(phase="error", running=False, current_file=None)
         return False
 
     _set_phase("finalizing", final_wrapup_start, 100, progress_window_s * 0.4)
-    _update_status(progress=100, phase="done", running=False)
+    _update_status(progress=100, phase="done", running=False, current_file=None)
     return True
 
 
@@ -386,8 +417,11 @@ class ApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self._write_json(200, {"status": "ok"})
             return
-        if parsed.path in {"/status", "/analysis/status"}:
+        if parsed.path == "/status":
             self._write_text(200, f"{_snapshot_progress()}\n")
+            return
+        if parsed.path == "/analysis/status":
+            self._write_json(200, _snapshot_status())
             return
         if parsed.path in {"/reports", "/reports/files"}:
             reports_dir = _resolve_reports_dir()
@@ -488,7 +522,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._write_json(500, {"error": str(exc)})
             return
 
-        _update_status(progress=0, running=True, phase="preparing")
+        _update_status(progress=0, running=True, phase="preparing", current_file=None)
         _start_progress_tracking()
 
         try:
@@ -499,6 +533,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 raise ValueError(f"No namespace directories found under {assessment_dir}")
 
             _set_phase("preparing", 8, 12, progress_window_s * 0.6)
+            _update_status(progress=12, phase="preparing", current_file=None)
 
             base_progress = 12
             final_wrapup_start = 95
@@ -514,14 +549,20 @@ class ApiHandler(BaseHTTPRequestHandler):
                 report_file = reports_dir / f"{namespace_dir.name}.md"
                 report_file.parent.mkdir(parents=True, exist_ok=True)
 
-                command = _build_command(namespace_dir, report_file)
-
+                current_file = _current_file_for_namespace(namespace_dir)
                 _set_phase(
                     f"analyzing {namespace_dir.name}",
                     current_start,
                     namespace_end,
                     progress_window_s,
                 )
+                _update_status(
+                    progress=current_start,
+                    phase=f"analyzing {namespace_dir.name}",
+                    current_file=current_file,
+                )
+
+                command = _build_command(namespace_dir, report_file)
 
                 try:
                     completed = subprocess.run(
@@ -547,6 +588,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                             "stderr": exc.stderr or "",
                         }
                     )
+                    _update_status(
+                        progress=namespace_end,
+                        phase=f"analyzing {namespace_dir.name}",
+                        current_file=current_file,
+                    )
                     current_start = namespace_end
                     continue
                 except OSError as exc:
@@ -561,6 +607,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                             "stdout": "",
                             "stderr": "",
                         }
+                    )
+                    _update_status(
+                        progress=namespace_end,
+                        phase=f"analyzing {namespace_dir.name}",
+                        current_file=current_file,
                     )
                     current_start = namespace_end
                     continue
@@ -583,7 +634,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                         f"{postprocess['embedded']} PNG(s) embedded, "
                         f"removed scripts={postprocess['removed_scripts']}"
                     )
-                    _update_status(progress=namespace_end)
+                    _update_status(
+                        progress=namespace_end,
+                        phase=f"analyzing {namespace_dir.name}",
+                        current_file=current_file,
+                    )
                 else:
                     has_error = True
                     result["error"] = "markdown report was not written"
@@ -606,13 +661,24 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "reports_dir": str(reports_dir),
                 "worknodes_dir": str((assessment_dir / WORKNODES_DIRNAME).resolve()),
                 "reports": run_results,
+                "status": _snapshot_status(),
             }
             self._write_json(500 if has_error else 200, payload)
         except ValueError as exc:
-            _update_status(progress=_snapshot_progress(), phase="error", running=False)
+            _update_status(
+                progress=_snapshot_progress(),
+                phase="error",
+                running=False,
+                current_file=None,
+            )
             self._write_json(500, {"error": str(exc)})
         except Exception as exc:  # noqa: BLE001
-            _update_status(progress=_snapshot_progress(), phase="error", running=False)
+            _update_status(
+                progress=_snapshot_progress(),
+                phase="error",
+                running=False,
+                current_file=None,
+            )
             self._write_json(500, {"error": str(exc)})
         finally:
             with _STATUS_LOCK:

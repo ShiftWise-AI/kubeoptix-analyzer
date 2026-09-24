@@ -285,7 +285,8 @@ The service listens on `http://0.0.0.0:8000` by default. It exposes:
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/health` | Returns `{"status":"ok"}` |
-| `GET` | `/status` or `/analysis/status` | Returns the current progress as a plain integer from 0 to 100 |
+| `GET` | `/status` | Returns the current progress as a plain integer from 0 to 100 |
+| `GET` | `/analysis/status` | Returns the richer structured status payload including progress, phase, and current file |
 | `GET` | `/assessment/folders` or `/assessment/namespaces` | Lists namespace folders under the assessment directory |
 | `GET` | `/reports` or `/reports/files` | Lists generated report files and timestamps |
 | `POST` | `/run` | Analyzes one or more namespaces sequentially |
@@ -299,7 +300,7 @@ curl -X POST http://localhost:8000/run \
   -d '{"namespaces":["my-namespace","another-namespace"]}'
 ```
 
-The response contains the selected namespaces, input/output directories, invoked command, exit code, stdout, stderr, and report path for each namespace. A successful run returns HTTP 200; a run with one or more namespace failures returns HTTP 500. Poll `/status` while processing and use `/reports` to discover generated files.
+The response contains the selected namespaces, input/output directories, invoked command, exit code, stdout, stderr, and report path for each namespace. A successful run returns HTTP 200; a run with one or more namespace failures returns HTTP 500. Poll `/status` for the legacy integer while `/analysis/status` exposes the richer phase and current file details; use `/reports` to discover generated files.
 
 ## Development
 
