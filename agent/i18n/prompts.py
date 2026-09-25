@@ -225,8 +225,9 @@ O arquivo deve ser fácil de entender por humanos e conter estas seções:
 7. Plano de ação em seções separadas:
    - Ações de infraestrutura do cluster / plataforma
    - Melhorias da aplicação
-8. Referências utilizadas (documentação Kubernetes/OpenShift/HPA/QoS) no final do arquivo
    - Priorização e critérios de aceite
+8. Referências utilizadas (documentação Kubernetes/OpenShift/HPA/QoS) no final do arquivo
+   
 
 Regras:
 - Não invente dados que não estejam nos arquivos.

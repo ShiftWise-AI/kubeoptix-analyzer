@@ -15,6 +15,19 @@ _CURSOR_MODEL_ALIASES = {
 }
 
 
+def _initialize_progress_file(progress_path: str) -> None:
+    if not progress_path:
+        return
+    target = Path(progress_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(
+        '{"current_file": null, "processed_files": []}',
+        encoding="utf-8",
+    )
+    temporary.replace(target)
+
+
 def run_cursor_assessment(
     artifacts_dir: Path,
     report_path: Path | None = None,
@@ -61,7 +74,9 @@ def run_cursor_assessment(
     model = _CURSOR_MODEL_ALIASES.get(raw_model.lower(), raw_model)
     if model != raw_model:
         print(f"[agent] Warning: normalized CURSOR_MODEL={raw_model!r} to {model!r}")
-    prompt = build_cursor_prompt(str(out))
+    progress_path = os.getenv("KUBEOPTIX_PROGRESS_FILE", "").strip()
+    _initialize_progress_file(progress_path)
+    prompt = build_cursor_prompt(str(out), progress_path=progress_path)
     if viz_catalog.strip():
         from agent.i18n import t
 

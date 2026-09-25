@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,26 @@ def _message_content(message: Any) -> str:
     if content:
         return str(content)
     return ""
+
+
+def _write_progress_event(
+    *,
+    current_file: str | None,
+    processed_files: set[str],
+) -> None:
+    progress_path = os.getenv("KUBEOPTIX_PROGRESS_FILE", "").strip()
+    if not progress_path:
+        return
+
+    payload = {
+        "current_file": current_file,
+        "processed_files": sorted(processed_files),
+    }
+    target = Path(progress_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload), encoding="utf-8")
+    temporary.replace(target)
 
 
 def run_assessment(
@@ -83,6 +104,7 @@ def run_assessment(
     print(f"[agent] Artifacts: {artifacts_dir}")
     print(f"[agent] Model: {settings.llm_model}")
     print(f"[agent] Tools: {', '.join(registry)}")
+    processed_files: set[str] = set()
 
     for iteration in range(1, settings.max_iterations + 1):
         print(f"[agent] Iteration {iteration}/{settings.max_iterations}")
@@ -128,7 +150,22 @@ def run_assessment(
                 if tool is None:
                     result = f"Unknown tool: {name}"
                 else:
+                    current_file = None
+                    if name in {"read_file", "find_files"}:
+                        requested_path = args.get("path")
+                        if isinstance(requested_path, str) and requested_path not in {"", "."}:
+                            current_file = requested_path
+                    _write_progress_event(
+                        current_file=current_file,
+                        processed_files=processed_files,
+                    )
                     result = tool.run(**args)
+                    if current_file is not None:
+                        processed_files.add(current_file)
+                    _write_progress_event(
+                        current_file=current_file,
+                        processed_files=processed_files,
+                    )
             except Exception as exc:  # noqa: BLE001
                 result = f"Error running {name}: {exc}"
 
