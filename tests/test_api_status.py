@@ -91,6 +91,47 @@ class FinalizeStatusTests(unittest.TestCase):
         self.assertFalse(ready)
         self.assertLess(api._snapshot_progress(), 100)
 
+    def test_polling_finishes_when_active_report_exists_on_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports_dir = Path(tmp)
+            run_started_at = time.time() - 1
+            (reports_dir / "shiftwise-ai.md").write_text("# report\n", encoding="utf-8")
+            api._update_status(progress=98, running=True, phase="analyzing shiftwise-ai")
+            api._set_active_report_watch(
+                reports_dir,
+                ["shiftwise-ai"],
+                run_started_at,
+            )
+
+            ready = api._finalize_active_status_if_reports_ready()
+
+        self.assertTrue(ready)
+        self.assertEqual(api._snapshot_progress(), 100)
+        self.assertEqual(api._STATUS.phase, "done")
+        self.assertFalse(api._STATUS.running)
+
+    def test_polling_does_not_finish_from_old_active_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports_dir = Path(tmp)
+            report_path = reports_dir / "shiftwise-ai.md"
+            report_path.write_text("# old report\n", encoding="utf-8")
+            old_timestamp = time.time() - 60
+            import os
+
+            os.utime(report_path, (old_timestamp, old_timestamp))
+            api._update_status(progress=98, running=True, phase="analyzing shiftwise-ai")
+            api._set_active_report_watch(
+                reports_dir,
+                ["shiftwise-ai"],
+                time.time(),
+            )
+
+            ready = api._finalize_active_status_if_reports_ready()
+
+        self.assertFalse(ready)
+        self.assertEqual(api._snapshot_progress(), 98)
+        self.assertEqual(api._STATUS.phase, "analyzing shiftwise-ai")
+
 
 class ProgressDetailsTests(unittest.TestCase):
     def test_file_progress_is_capped_before_report_completion(self) -> None:
@@ -124,6 +165,27 @@ class ProgressDetailsTests(unittest.TestCase):
         self.assertEqual(status["status"], "running")
         self.assertEqual(status["phase"], "analyzing deployment")
         self.assertEqual(status["current_file"], "deployment-prod.yaml")
+
+    def test_snapshot_status_estimates_processed_files_from_progress(self) -> None:
+        api._update_file_progress(files_processed=0, files_total=698, current_file=None)
+        api._update_status(
+            progress=49,
+            running=True,
+            phase="analyzing shiftwise-ai",
+            current_file=None,
+        )
+
+        status = api._snapshot_status()
+        self.assertEqual(status["files_total"], 698)
+        self.assertGreater(status["files_processed"], 0)
+        self.assertLess(status["files_processed"], 698)
+
+    def test_snapshot_status_reports_all_files_when_done(self) -> None:
+        api._update_file_progress(files_processed=0, files_total=698, current_file=None)
+        api._update_status(progress=100, running=False, phase="done", current_file=None)
+
+        status = api._snapshot_status()
+        self.assertEqual(status["files_processed"], 698)
 
     def test_snapshot_progress_advances_with_phase_window(self) -> None:
         api._update_status(

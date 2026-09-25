@@ -41,6 +41,9 @@ class ExecutionStatus:
     phase_end_progress: int | None = None
     phase_started_at: float | None = None
     phase_window_s: float | None = None
+    active_reports_dir: Path | None = None
+    active_namespace_names: tuple[str, ...] = ()
+    active_run_started_at: float | None = None
 
 
 _STATUS_LOCK = threading.Lock()
@@ -154,6 +157,20 @@ def _estimated_progress_locked() -> int:
     return max(progress, min(phase_end, estimated))
 
 
+def _estimated_files_processed_locked(progress: int) -> int:
+    files_total = max(0, _STATUS.files_total)
+    files_processed = max(0, min(files_total, _STATUS.files_processed))
+    if files_total <= 0:
+        return files_processed
+    if progress >= 100:
+        return files_total
+    if not _STATUS.running:
+        return files_processed
+
+    estimated = int(progress * files_total / 99)
+    return max(files_processed, min(files_total, estimated))
+
+
 def _status_value() -> str:
     if _STATUS.phase == "error":
         return "error"
@@ -168,6 +185,7 @@ def _snapshot_status() -> dict[str, object]:
     with _STATUS_LOCK:
         phase = _STATUS.phase
         progress = _estimated_progress_locked()
+        files_processed = _estimated_files_processed_locked(progress)
         status = _status_value()
         current_file = _STATUS.current_file
         return {
@@ -177,7 +195,7 @@ def _snapshot_status() -> dict[str, object]:
             "current_file": current_file,
             "running": _STATUS.running,
             "files_total": _STATUS.files_total,
-            "files_processed": _STATUS.files_processed,
+            "files_processed": files_processed,
         }
 
 
@@ -423,6 +441,39 @@ def finalize_status_if_reports_ready(
     return True
 
 
+def _set_active_report_watch(
+    reports_dir: Path,
+    namespace_names: list[str],
+    run_started_at: float,
+) -> None:
+    with _STATUS_LOCK:
+        _STATUS.active_reports_dir = reports_dir
+        _STATUS.active_namespace_names = tuple(namespace_names)
+        _STATUS.active_run_started_at = run_started_at
+
+
+def _finalize_active_status_if_reports_ready() -> bool:
+    with _STATUS_LOCK:
+        if not _STATUS.running or _STATUS.phase in {"done", "error"}:
+            return False
+        reports_dir = _STATUS.active_reports_dir
+        namespace_names = list(_STATUS.active_namespace_names)
+        run_started_at = _STATUS.active_run_started_at
+
+    if reports_dir is None or not namespace_names:
+        return False
+
+    if missing_markdown_reports(
+        reports_dir,
+        namespace_names,
+        run_started_at=run_started_at,
+    ):
+        return False
+
+    _update_status(progress=100, phase="done", running=False, current_file=None)
+    return True
+
+
 def _list_report_files_with_dates(reports_dir: Path) -> list[dict[str, str]]:
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -456,6 +507,12 @@ def _execute_assessment(
         namespace_count = len(namespace_dirs)
         if namespace_count == 0:
             raise ValueError(f"No namespace directories found under {assessment_dir}")
+
+        _set_active_report_watch(
+            reports_dir,
+            [namespace_dir.name for namespace_dir in namespace_dirs],
+            run_started_at,
+        )
 
         tracked_files = set(_list_processable_files(namespace_dirs))
         processed_files: set[Path] = set()
@@ -583,9 +640,11 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._write_json(200, {"status": "ok"})
             return
         if parsed.path == "/status":
+            _finalize_active_status_if_reports_ready()
             self._write_text(200, f"{_snapshot_progress()}\n")
             return
         if parsed.path == "/analysis/status":
+            _finalize_active_status_if_reports_ready()
             self._write_json(200, _snapshot_status())
             return
         if parsed.path in {"/reports", "/reports/files"}:
