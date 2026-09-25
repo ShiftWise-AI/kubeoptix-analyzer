@@ -125,6 +125,34 @@ class ProgressDetailsTests(unittest.TestCase):
         self.assertEqual(status["phase"], "analyzing deployment")
         self.assertEqual(status["current_file"], "deployment-prod.yaml")
 
+    def test_snapshot_progress_advances_with_phase_window(self) -> None:
+        api._update_status(
+            progress=14,
+            running=True,
+            phase="analyzing shiftwise-ai",
+            current_file=None,
+            phase_start_progress=14,
+            phase_end_progress=94,
+            phase_started_at=time.monotonic() - 10,
+            phase_window_s=20,
+        )
+
+        self.assertGreaterEqual(api._snapshot_progress(), 54)
+
+    def test_snapshot_progress_does_not_exceed_phase_end(self) -> None:
+        api._update_status(
+            progress=14,
+            running=True,
+            phase="analyzing shiftwise-ai",
+            current_file=None,
+            phase_start_progress=14,
+            phase_end_progress=80,
+            phase_started_at=time.monotonic() - 60,
+            phase_window_s=20,
+        )
+
+        self.assertEqual(api._snapshot_progress(), 80)
+
     def test_snapshot_status_clamps_to_100_and_uses_null_current_file_when_idle(self) -> None:
         api._update_status(progress=999, running=False, phase="idle", current_file=None)
 
