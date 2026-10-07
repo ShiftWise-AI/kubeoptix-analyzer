@@ -358,4 +358,4 @@ The installation flow in `install.sh` performs a two-phase deployment:
 
 ## License
 
-No license file is currently included in the repository.
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the full license text.
