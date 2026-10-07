@@ -1,5 +1,7 @@
 # kubeoptix-analyzer
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch workflow and contribution process.
+
 `kubeoptix-analyzer` is an OpenShift and Kubernetes assessment tool that reads previously collected workload artifacts, inspects their configuration and runtime metadata, and produces a Markdown report with findings, risks, visualizations, and suggested remediation actions.
 
 The project is designed for artifact-based analysis rather than live cluster mutation. It does not query or modify a cluster during analysis. It expects pre-collected manifests, logs, and worker-node inventory to already exist in a structured directory before execution. The analyzer then reviews workloads, services, routes, ConfigMaps, operators, resource sizing, and observability data to identify configuration and reliability issues.
