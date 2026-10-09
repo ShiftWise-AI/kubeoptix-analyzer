@@ -28,11 +28,11 @@ ENV LOG_DIR=/app/logs/ \
 
 ENV PATH=/app/.venv/bin:$PATH
 
-RUN dnf install -y \
+RUN dnf update -y \
+    && dnf install -y \
     python3 \
     python3-pip \
     graphviz \
-    && dnf update -y \
     && dnf clean all \
     && useradd -m -s /bin/bash kubeoptix \
     && mkdir -p $LOG_DIR \
