@@ -58,3 +58,26 @@ findings or secrets. No changed workflows were committed, pushed, or executed
 remotely; no image was published. Acceptance requires a blocked failing PR,
 a reviewed green promotion to main, and successful publication of the scanned
 image with matching Quay digest.
+
+## PR Failure Remediation (2026-10-09)
+
+PR #28 was blocked by Python dependencies and vulnerable Node dependencies in
+the bundled Cursor SDK. cursor-sdk 1.0.37 still embeds the affected Undici/Busboy,
+so a separate build stage patches its bridge using npm overrides for Undici
+6.28.1 and Busboy 3.2.1. npm/build tools are not copied into the runtime. msgpack,
+urllib3, and setuptools are also fixed. Bridge imports and 28 Python 3.12 tests
+passed on the real image. Authenticated Cursor sessions were not exercised.
+
+Two embedded build inventories are excluded from the final-image scan:
+`**/pip/_vendor/bom.cdx.json` and
+`**/virtualenv-*.dist-info/sboms/virtualenv.cdx.json`. The latter nests historical
+pip build components and falsely reports msgpack 1.1.2, setuptools 70.3.0, and
+urllib3 2.7.0 even though the installed versions are 1.2.3, 84.0.0, and 2.8.0.
+The inventories remain in the image for inspection. Actual package METADATA,
+Node packages, binaries, secrets, and runtime configuration are still scanned;
+no global CVE ignore or ignore-unfixed exception was added.
+
+The resulting image scan passed. pip check additionally reports the pre-existing
+KubeDiagrams 0.8.0 / PyGraphviz 2.0.1 metadata conflict; this change does not claim
+to fix it or silently downgrade the working renderer. The updated PR requires
+the new GitHub checks and independent review before merging.
