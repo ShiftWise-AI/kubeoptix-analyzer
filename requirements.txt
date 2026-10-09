@@ -1,7 +1,10 @@
 openai>=1.40.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
-cursor-sdk>=0.1.0
+cursor-sdk==1.0.37
+msgpack==1.2.3
+urllib3==2.8.0
+setuptools==84.0.0
 matplotlib>=3.8,<4
 numpy>=1.26,<3
 Pillow>=10.0,<13
