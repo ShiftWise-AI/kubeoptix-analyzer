@@ -262,10 +262,37 @@ class SystemSettingsFetchTests(unittest.TestCase):
         with self.assertRaisesRegex(SettingsLoadError, "Unexpected response"):
             self.fetch(lambda request: httpx.Response(200, json=[]))
 
-    def test_fetch_rejects_local_file_urls(self):
-        with patch("agent.system_settings._is_container_or_ocp", return_value=True):
-            with self.assertRaises(SettingsLoadError):
-                system_settings.fetch_system_settings("file:///etc/passwd")
+    def test_fetch_rejects_non_http_urls(self):
+        for url in ("file:///etc/passwd", "ftp://settings.example", "data:text/plain,{}"):
+            for in_container in (False, True):
+                with (
+                    self.subTest(url=url, in_container=in_container),
+                    patch("agent.system_settings._is_container_or_ocp", return_value=in_container),
+                ):
+                    if in_container:
+                        with self.assertRaises(SettingsLoadError):
+                            system_settings.fetch_system_settings(url)
+                    else:
+                        self.assertEqual(
+                            system_settings.fetch_system_settings(url), SystemSettings()
+                        )
+
+    def test_fetch_rejects_redirects_to_non_http_urls(self):
+        for url in ("file:///etc/passwd", "ftp://settings.example"):
+            with self.subTest(url=url):
+                def redirect(request):
+                    return httpx.Response(302, headers={"Location": url})
+
+                client = httpx.Client(
+                    mounts={"https://settings.example": httpx.MockTransport(redirect)},
+                    follow_redirects=True,
+                )
+                with (
+                    patch("agent.system_settings.httpx.Client", return_value=client),
+                    patch("agent.system_settings._is_container_or_ocp", return_value=True),
+                ):
+                    with self.assertRaises(SettingsLoadError):
+                        system_settings.fetch_system_settings("https://settings.example")
 
 
 if __name__ == "__main__":
