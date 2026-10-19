@@ -26,7 +26,7 @@ jobs:
             exit 0
           fi
 
-          if [[ "$BASE_REF" == "develop" && "$HEAD_REF" =~ ^feature/.+ ]]; then
+          if [[ "$BASE_REF" == "develop" && "$HEAD_REF" =~ ^(feature|copilot)/.+ ]]; then
             exit 0
           fi
 
@@ -34,5 +34,5 @@ jobs:
             exit 0
           fi
 
-          echo "::error::Only 'feature/*' -> 'develop' and same-repository 'develop' -> 'main' pull requests are allowed."
+          echo "::error::Only 'feature/*' or 'copilot/*' -> 'develop' and same-repository 'develop' -> 'main' pull requests are allowed."
           exit 1

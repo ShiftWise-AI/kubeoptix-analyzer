@@ -7,6 +7,7 @@ This repository is one component of the KubeOptix platform. Use the same branch 
 - `develop` is the integration branch for normal work.
 - `main` is the production/release branch and accepts pull requests only from this repository's `develop`.
 - Create planned features and ordinary fixes as `feature/<short-description>` from `develop`.
+- Copilot-generated `copilot/*` branches also target `develop`.
 - Production fixes follow the same `feature/*` flow. There is no `stage` branch in the pipeline.
 
 GitHub records commit ancestry, not the branch a contributor selected when creating a branch. The workflow checks PR names and destinations; creating a branch from the required base remains a contributor responsibility.
@@ -14,10 +15,10 @@ GitHub records commit ancestry, not the branch a contributor selected when creat
 ## Feature flow
 
 ```text
-feature/* -> develop -> main
+feature/* or copilot/* -> develop -> main
 ```
 
-Open a PR from `feature/*` only to `develop`, then promote through a PR from `develop` to `main`. PRs run Semgrep SAST and Trivy dependency/secret scans, without compilation, tests, or container builds. Any security finding or scanner failure blocks the required `ci-required` check and merge.
+Open a PR from `feature/*` or `copilot/*` only to `develop`, then promote through a PR from `develop` to `main`. PRs run Semgrep SAST and Trivy dependency/secret scans, without compilation, tests, or container builds. Any security finding or scanner failure blocks the required `ci-required` check and merge.
 
 ## Pull requests and protections
 
