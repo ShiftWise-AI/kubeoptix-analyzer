@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+
+import httpx
 
 
 @dataclass(frozen=True)
@@ -51,30 +51,31 @@ def _parse_settings(payload: dict) -> SystemSettings:
 def fetch_system_settings(base_url: str) -> SystemSettings:
     timeout_s = float(os.getenv("SYSTEM_SETTINGS_TIMEOUT_S", "30"))
     url = f"{base_url.rstrip('/')}/system-settings"
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            payload = json.load(response)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace").strip()
+        with httpx.Client(follow_redirects=True, timeout=timeout_s) as client:
+            response = client.get(url, headers={"Accept": "application/json"})
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.content.decode("utf-8", errors="replace").strip()
         detail = f": {body}" if body else ""
         if _is_container_or_ocp():
             raise SettingsLoadError(
-                f"Failed to load system settings from {url} (HTTP {exc.code}){detail}"
+                f"Failed to load system settings from {url} (HTTP {exc.response.status_code}){detail}"
             ) from exc
         print(
             f"[agent] Warning: system settings unavailable at {url} "
-            f"(HTTP {exc.code}); using .env fallback."
+            f"(HTTP {exc.response.status_code}); using .env fallback."
         )
         return SystemSettings()
-    except urllib.error.URLError as exc:
+    except (httpx.RequestError, httpx.InvalidURL) as exc:
         if _is_container_or_ocp():
             raise SettingsLoadError(
-                f"Failed to reach system settings API at {url}: {exc.reason}"
+                f"Failed to reach system settings API at {url}: {exc}"
             ) from exc
         print(
             f"[agent] Warning: system settings unreachable at {url} "
-            f"({exc.reason}); using .env fallback."
+            f"({exc}); using .env fallback."
         )
         return SystemSettings()
     except json.JSONDecodeError as exc:
