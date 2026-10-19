@@ -8,6 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
+
+from agent import system_settings
 from agent.analysis.action_plan import render_action_plan_md
 from agent.analysis.configmaps_security import (
     ConfigMapSecurityResult,
@@ -191,6 +194,78 @@ class ReportLanguageTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaises(SettingsLoadError):
                 load_runtime_settings()
+
+
+class SystemSettingsFetchTests(unittest.TestCase):
+    def fetch(self, handler, *, in_container=False):
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), follow_redirects=True, timeout=7.0
+        )
+        with (
+            patch.dict(os.environ, {"SYSTEM_SETTINGS_TIMEOUT_S": "7"}),
+            patch("agent.system_settings.httpx.Client", return_value=client) as factory,
+            patch("agent.system_settings._is_container_or_ocp", return_value=in_container),
+        ):
+            result = system_settings.fetch_system_settings("https://settings.example/")
+        factory.assert_called_once_with(follow_redirects=True, timeout=7.0)
+        return result
+
+    def test_fetch_preserves_request_and_payload(self):
+        def respond(request):
+            self.assertEqual(str(request.url), "https://settings.example/system-settings")
+            self.assertEqual(request.headers["Accept"], "application/json")
+            self.assertEqual(request.extensions["timeout"]["read"], 7.0)
+            return httpx.Response(
+                200, json={"language": "en-US", "status": "ACTIVE", "llmModel": "model"}
+            )
+
+        settings = self.fetch(respond)
+        self.assertEqual(settings.language, "en-US")
+        self.assertEqual(settings.status, "active")
+        self.assertEqual(settings.llm_model, "model")
+
+    def test_fetch_follows_redirects(self):
+        def respond(request):
+            if request.url.path == "/system-settings":
+                return httpx.Response(302, headers={"Location": "/settings"})
+            return httpx.Response(200, json={"language": "es-ES"})
+
+        self.assertEqual(self.fetch(respond).language, "es-ES")
+
+    def test_fetch_preserves_http_failure_behavior(self):
+        def unavailable(request):
+            return httpx.Response(503, text="database unavailable")
+
+        self.assertEqual(self.fetch(unavailable), SystemSettings())
+        with self.assertRaisesRegex(SettingsLoadError, "HTTP 503.*database unavailable"):
+            self.fetch(unavailable, in_container=True)
+
+    def test_fetch_preserves_transport_failure_behavior(self):
+        for error_type in (httpx.ConnectError, httpx.ReadTimeout):
+            with self.subTest(error=error_type):
+                def unavailable(request):
+                    raise error_type("service unavailable", request=request)
+
+                self.assertEqual(self.fetch(unavailable), SystemSettings())
+                with self.assertRaisesRegex(SettingsLoadError, "service unavailable"):
+                    self.fetch(unavailable, in_container=True)
+
+    def test_fetch_preserves_invalid_json_behavior(self):
+        def invalid(request):
+            return httpx.Response(200, content=b"not-json")
+
+        self.assertEqual(self.fetch(invalid), SystemSettings())
+        with self.assertRaisesRegex(SettingsLoadError, "Invalid JSON"):
+            self.fetch(invalid, in_container=True)
+
+    def test_fetch_rejects_non_mapping_payload(self):
+        with self.assertRaisesRegex(SettingsLoadError, "Unexpected response"):
+            self.fetch(lambda request: httpx.Response(200, json=[]))
+
+    def test_fetch_rejects_local_file_urls(self):
+        with patch("agent.system_settings._is_container_or_ocp", return_value=True):
+            with self.assertRaises(SettingsLoadError):
+                system_settings.fetch_system_settings("file:///etc/passwd")
 
 
 if __name__ == "__main__":
