@@ -43,7 +43,12 @@ class PipelineTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         chart_text = (root / "helm/kubeoptix-analyzer/Chart.yaml").read_text()
         values_text = (root / "helm/kubeoptix-analyzer/values.yaml").read_text()
-        drifted_values = values_text.replace("tag: 1.0.0", "tag: 0.9.0", 1)
+        current_tag = yaml.safe_load(values_text)["image"]["tag"]
+        drifted_tag = "0.9.0" if current_tag != "0.9.0" else "0.9.1"
+        drifted_values = values_text.replace(
+            f"tag: {current_tag}", f"tag: {drifted_tag}", 1
+        )
+        self.assertNotEqual(drifted_values, values_text)
         with self.assertRaises(ValueError):
             pipeline.replace_chart_version(chart_text, drifted_values, "1.0.6")
 
