@@ -95,6 +95,7 @@ jobs:
     env:
       IMAGE: quay.io/parraes/kubeoptix-analyzer
       GH_TOKEN: ${{ github.token }}
+      OPERATOR_TOKEN_AVAILABLE: ${{ secrets.OPERATOR_TOKEN != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -107,14 +108,16 @@ jobs:
         env:
           QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
           QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-          OPERATOR_TOKEN: ${{ secrets.OPERATOR_TOKEN }}
         run: |
-          for name in QUAY_USERNAME QUAY_PASSWORD OPERATOR_TOKEN; do
+          for name in QUAY_USERNAME QUAY_PASSWORD; do
             if [[ -z "${!name}" ]]; then
               echo "::error::Missing secret $name"
               exit 1
             fi
           done
+          if [[ "$OPERATOR_TOKEN_AVAILABLE" != true ]]; then
+            echo '::notice::OPERATOR_TOKEN is unavailable; the image will be published without opening an Operator update PR.'
+          fi
       - name: Install release helper dependency
         run: python -m pip install 'PyYAML>=6.0'
       - name: Configure release identity
@@ -197,6 +200,7 @@ jobs:
           docker push "$IMAGE:sha-$SOURCE"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Check out Operator for an isolated update PR
+        if: env.OPERATOR_TOKEN_AVAILABLE == 'true'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ShiftWise-AI/kubeoptix-operator
@@ -204,11 +208,13 @@ jobs:
           path: operator
           token: ${{ secrets.OPERATOR_TOKEN }}
       - name: Set up Go for Operator validation
+        if: env.OPERATOR_TOKEN_AVAILABLE == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: operator/go.mod
           cache-dependency-path: operator/go.sum
       - name: Open or resume validated Operator PR
+        if: env.OPERATOR_TOKEN_AVAILABLE == 'true'
         env:
           GH_TOKEN: ${{ secrets.OPERATOR_TOKEN }}
           VERSION: ${{ steps.release.outputs.version }}

@@ -17,6 +17,38 @@ spec.loader.exec_module(pipeline)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_operator_token_does_not_gate_quay_release(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = yaml.safe_load(
+            (root / ".github/workflows/ci-release.yml").read_text()
+        )
+        release = workflow["jobs"]["release"]
+        self.assertEqual(
+            release["env"]["OPERATOR_TOKEN_AVAILABLE"],
+            "${{ secrets.OPERATOR_TOKEN != '' }}",
+        )
+
+        credential_step = next(
+            step for step in release["steps"]
+            if step.get("name") == "Check credentials before reserving a release"
+        )
+        self.assertEqual(
+            set(credential_step["env"]), {"QUAY_USERNAME", "QUAY_PASSWORD"}
+        )
+        self.assertIn("for name in QUAY_USERNAME QUAY_PASSWORD; do", credential_step["run"])
+
+        operator_steps = [
+            step for step in release["steps"]
+            if step.get("with", {}).get("repository") == "ShiftWise-AI/kubeoptix-operator"
+            or step.get("name") in (
+                "Set up Go for Operator validation",
+                "Open or resume validated Operator PR",
+            )
+        ]
+        self.assertEqual(len(operator_steps), 3)
+        for step in operator_steps:
+            self.assertEqual(step["if"], "env.OPERATOR_TOKEN_AVAILABLE == 'true'")
+
     def test_next_version_uses_highest_patch_release(self):
         self.assertEqual(pipeline.next_version("1.0.0", ["1.0.2", "1.0.5"]), "1.0.6")
         self.assertEqual(pipeline.next_version("1.2.4", []), "1.2.5")
