@@ -8,7 +8,7 @@ namespace:
 image:
   useBuildOutput: true
   repository: quay.io/parraes/kubeoptix-analyzer
-  tag: 1.0.0
+  tag: 1.0.6
   pullPolicy: Always
 
 build:
@@ -16,7 +16,7 @@ build:
   registryHost: image-registry.openshift-image-registry.svc:5000
   # Defaults to the release fullname when empty.
   imageStreamName: ""
-  outputTag: 1.0.0
+  outputTag: 1.0.6
   containerfilePath: Containerfile
   git:
     uri: ""
