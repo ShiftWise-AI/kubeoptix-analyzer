@@ -119,15 +119,15 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Install release dependencies
+        run: python -m pip install -r requirements.txt pytest
       - name: Reserve or resume version
         id: release
         env:
           SOURCE: ${{ inputs.source || github.sha }}
         run: python scripts/ci_pipeline.py reserve --source "$SOURCE"
       - name: Test exact versioned source
-        run: |
-          python -m pip install -r requirements.txt pytest
-          python -m pytest tests
+        run: python -m pytest tests
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
